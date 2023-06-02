@@ -1,55 +1,196 @@
 \import Indexed
+\import Records (transport)
 
 -- 1. Implement the function 'lookup', which takes a list and a natural number n and returns the n-th element in the list.
 --    Note that it is impossible to define such a function without restrictions on n sice n can be greater than the size of the list.
 --    Therefore the function should also take a proof that n is in the right range: T (n < length xs).
 
-\func lookup => {?}
+\func list-length {A : \Type} (xs : List A) : Nat \elim xs
+  | nil => 0
+  | cons _ xs => suc (list-length xs)
+
+\func bruh {A : \Type} (e : Empty) : A \elim e
+
+\func <-suc {m n : Nat} (m<n : T (m < n)) : T (suc m < suc n) \elim m, n
+  | 0, 0 => m<n
+  | 0, suc n => unit
+  | suc m, 0 => m<n
+  | suc m, suc n => m<n
+
+\func suc-< {m n : Nat} (m<n : T (suc m < suc n)) : T (m < n) \elim m, n
+  | 0, 0 => m<n
+  | 0, suc n => unit
+  | suc m, 0 => m<n
+  | suc m, suc n => m<n
+
+\func list-lookup {A : \Type} (n : Nat) (xs : List A) (n<xs : T (n < list-length xs)) : A \elim n, xs
+  | 0, nil => bruh n<xs
+  | 0, cons a _ => a
+  | suc _, nil => bruh n<xs
+  | suc n, cons _ xs => list-lookup n xs n<xs
 
 -- 2. Implement function replicate for 'vec' and 'Vec' (this function creates the list of a given length filled with a
 -- given element).
 
+\func replicate-vec
+  {A : \Type} (n : Nat) (a : A)
+  : vec A n \elim n
+  | 0 => ()
+  | suc n => (a, replicate-vec n a)
+
+\func replicate-Vec
+  {A : \Type} (n : Nat) (a : A)
+  : Vec A n \elim n
+  | 0 => fnil
+  | suc n => fcons a (replicate-Vec n a)
+
 -- 3. Implement function 'map' for 'vec' and 'Vec'.
+
+\func map-vec
+  {A B : \Type} {n : Nat}
+  (f : A -> B) (v : vec A n)
+  : vec B n \elim n
+  | 0 => ()
+  | suc n => (f v.1, map-vec f v.2)
+
+\func map-Vec
+  {A B : \Type} {n : Nat}
+  (f : A -> B) (v : Vec A n)
+  : Vec B n \elim n, v
+  | 0, fnil => fnil
+  | suc n, fcons a v => fcons (f a) (map-Vec f v)
 
 -- 4. Implement function 'zipWith' for 'vec' and 'Vec'.
 --    The function must take lists of equal lengths.
 
+\func zipWith-vec
+  {A B : \Type} {n : Nat}
+  (va : vec A n) (vb : vec B n)
+  : vec (\Sigma A B) n \elim n
+  | 0 => ()
+  | suc n => ((va.1,vb.1), zipWith-vec va.2 vb.2)
+
+\func map2
+  {A B C : \Type} {n : Nat}
+  (f : A -> B -> C)
+  (va : Vec A n) (vb : Vec B n)
+  : Vec C n \elim n, va, vb
+  | 0, fnil, fnil => fnil
+  | suc n, fcons a va, fcons b vb => fcons (f a b) (map2 f va vb)
+
+\func zipWith-Vec
+  {A B : \Type} {n : Nat}
+  : Vec A n -> Vec B n -> Vec (\Sigma A B) n => map2 \lam a b => (a, b)
+
 -- 5. Functions Fin n -> A correspond to lists of length n with elements in A.
 --    Implement the function that converts an element of Fin n -> A to element of Vec A n.
 
-\func funToVec {A : \Type} {n : Nat} (f : Fin n -> A) : Vec A n => {?}
+\func funToVec {A : \Type} {n : Nat} (f : Fin n -> A) : Vec A n \elim n
+  | 0 => fnil
+  | suc n => fcons (f fzero) (funToVec (help f))
+    \where \func help {n : Nat} (f : Fin (suc n) -> A) (m : Fin n) => f (fsuc m)
 
 -- 6. Define the type of matrices and a number of functions for them:
 
-\func Mat (A : \Type) (n m : Nat) : \Type => {?}
+\func Mat (A : \Type) (n m : Nat) : \Type => Vec (Vec A m) n
 
 -- diagonal matrix with elements e on the diagonal and z at all other positions.
 
-\func diag {A : \Type} (z e : A) (n : Nat) : Mat A n n => {?}
+\func diag {A : \Type} (z e : A) (n : Nat) : Mat A n n \elim n
+  | 0 => fnil
+  | suc n => fcons (fcons e (replicate-Vec n z)) (map-Vec (fcons z) (diag z e n))
 
 -- transposition
 
-\func transpose {A : \Type} {n m : Nat} (M : Mat A n m) : Mat A m n => {?}
+\func transpose {A : \Type} {n m : Nat} (M : Mat A n m) : Mat A m n \elim n, M
+  | 0, fnil => replicate-Vec m fnil
+  | suc n, fcons v M => map2 fcons v (transpose M)
 
 -- addition
 
-\func matAdd {A : \Type} (add : A -> A -> A) (n m : Nat) (M N : Mat A n m) : Mat A n m => {?}
+\func matAdd {A : \Type} (add : A -> A -> A) (n m : Nat) (M N : Mat A n m) : Mat A n m =>
+  map2 (map2 add) M N
 
 -- multiplication
 
+\func column {A : \Type} (n m : Nat) (M : Mat A n m) (f : Fin m) : Vec A n =>
+  map-Vec (\lam v => lookup v f) M
+
+\func row {A : \Type} (n m : Nat) (M : Mat A n m) (f : Fin n) : Vec A m => lookup M f
+
+\func foldr {A B : \Type} (f : A -> B -> B) {n : Nat} (v : Vec A n) (b : B) : B \elim n, v
+  | 0, fnil => b
+  | suc n, fcons a v => f a (foldr f v b)
+
+\func dot-prod
+  {A : \Type} (z : A)
+  (add mul : A -> A -> A)
+  {n : Nat} (v1 v2 : Vec A n) : A =>
+  foldr add (map2 mul v1 v2) z
+
+\func mat-vec-prod
+  {A : \Type} (z : A)
+  (add mul : A -> A -> A)
+  (n m : Nat) (M : Mat A n m) (v : Vec A m) : Vec A n =>
+  map-Vec (dot-prod z add mul v) M
+
+\func vec-mat-prod
+  {A : \Type} (z : A)
+  (add mul : A -> A -> A)
+  (n m : Nat) (v : Vec A n) (M : Mat A n m) : Vec A m =>
+  map-Vec (dot-prod z add mul v) (transpose M)
+
 -- z is neutral under addition.
-\func matMul {A : \Type} (z : A) (add mul : A -> A -> A) (n m k : Nat) (M : Mat A n m) (N : Mat A m k) : Mat A n k => {?}
+\func matMul
+  {A : \Type} (z : A)
+  (add mul : A -> A -> A)
+  (n m k : Nat) (M : Mat A n m)
+  (N : Mat A m k) : Mat A n k \elim n, M
+  | 0, fnil => fnil
+  | suc n, fcons v M =>
+    fcons (vec-mat-prod z add mul _ _ v N) (matMul z add mul _ _ _ M N)
 
 -- 7. Define the type CTree A n of (complete and full) binary trees of height precisely n, which store elements in internal nodes, but not in leaves.
 --    The height of a leaf is 0.
 
-\data CTree (A : \Type) (n : Nat)
+\data CTree (A : \Type) (n : Nat) : \Type \elim n
+  | 0 => cleaf
+  | suc n => cnode (CTree A n) A (CTree A n)
 
 -- 8. Define the type Tree A n of binary trees of height at most n, which store elements in internal nodes, but not in leaves.
 --    The height of a leaf is 0.
 
-\data Tree (A : \Type) (n : Nat)
+\data Tree (A : \Type) (n : Nat) \elim n
+  | 0 => leaf
+  | suc n => node (l r : Fin n) (Tree A (toNat l)) A (Tree A (toNat r))
 
 -- Define the function that computes the height of a tree.
 
-\func height {A : \Type} (n : Nat) (t : Tree A n) : Fin (suc n) => {?}
+\func max (n m : Nat) : Nat \elim n, m
+  | 0, 0 => 0
+  | 0, suc m => suc m
+  | suc n, 0 => suc n
+  | suc n, suc m => suc (max n m)
+
+\func toNat-Fin (n : Nat) (f : Fin n) (f' : Fin (toNat f)) : Fin n \elim n, f, f'
+  | suc n, fsuc f, fzero => fzero
+  | suc n, fsuc f, fsuc f' => fsuc (toNat-Fin n f f')
+
+\func toNat-Fin-suc (n : Nat) (f : Fin n) (f' : Fin (suc (toNat f))) : Fin (suc n) \elim f'
+  | fzero => fzero
+  | fsuc f' => fsuc (toNat-Fin n f f')
+
+\func Max {n : Nat} (f1 f2 : Fin n) : Fin n \elim n, f1, f2
+  | suc n, fzero, fzero => fzero
+  | suc n, fzero, fsuc f2 => fsuc f2
+  | suc n, fsuc f1, fzero => fsuc f1
+  | suc n, fsuc f1, fsuc f2 => fsuc (Max f1 f2)
+
+\func height {A : \Type} (n : Nat) (t : Tree A n) : Fin (suc n) \elim n, t
+  | 0, leaf => fzero
+  | suc n, node l r t1 a t2 =>
+    \let | hl : Fin (suc (toNat l)) => height _ t1
+         | hr : Fin (suc (toNat r)) => height _ t2
+         | Hl : Fin (suc n) => toNat-Fin-suc _ l hl
+         | Hr : Fin (suc n) => toNat-Fin-suc _ r hr
+    \in fsuc (Max Hl Hr)

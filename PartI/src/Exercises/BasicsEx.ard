@@ -1,10 +1,12 @@
+\import Basics (-,*)
+\import Indexed
 -- 1. Define priorities of the functions f1, f2, f3, f4, f5 and f6 so that the function 'test' typechecks.
 
-\func f1 (x y : Nat) => x
+\func \fix 9 f1 (x y : Nat) => x
 \func f2 : Nat => 0
-\func f3 (f : Nat -> Nat) (z : Nat) : Int => 0
+\func \infix 1 f3 (f : Nat -> Nat) (z : Nat) : Int => 0
 \func f4 : Nat => 0
-\func f5 => f1
+\func \infix 9 f5 => f1
 \func f6 => f4
 
 \func test => f1 f2 f3 f4 f5 f6
@@ -16,27 +18,57 @@
 
 -- 3. Define || via 'if'.
 
-\func \infixr 2 || (x y : Bool) : Bool => {?}
+\func my-if {A : \Type} (b : Bool) (a1 a2 : A) : A \elim b
+  | false => a2
+  | true => a1
+
+\func \infixr 2 || (x y : Bool) : Bool => my-if x true y
 
 -- 4. Define the power and the factorial functions for natural numbers.
 
-\func \infixr 8 ^ (x y : Nat) => {?}
+\func \infixr 8 ^ (x y : Nat) : Nat \elim y
+  | 0 => 1
+  | suc y => x * x ^ y
 
-\func fac (x : Nat) => {?}
+\func fac (x : Nat) : Nat \elim x
+  | 0 => 1
+  | 1 => 1
+  | suc (suc x) => fac (suc x) + fac x
 
 -- 5. Define mod and gcd.
 
-\func mod (x y : Nat) => {?}
+\func mod (x y : Nat) => mod' x x y
+  \where
+    \func mod' (s x y : Nat) : Nat \elim s
+      | 0 => x
+      | suc s => if (x < y) x (mod' s (x - y) y)
 
-\func gcd (x y : Nat) => {?}
+\func gcd (x y : Nat) : Nat => gcd' x x y
+    \where
+      \func gcd' (s x y : Nat) : Nat \elim s
+        | 0 => y
+        | suc s => gcd' s (mod y x) x
 
 -- 6. Define the map function.
 
 \data List (A : \Type) | nil | \infixr 5 :: A (List A)
 
-\func map {A B : \Type} (f : A -> B) (xs : List A) : List B => {?}
+\func map {A B : \Type} (f : A -> B) (xs : List A) : List B \elim xs
+  | nil => nil
+  | a :: xs => f a :: map f xs
 
 -- 7. Define the transpose function.
 --    It takes a list of lists considered as a matrix and returns a list of lists which represents the transposed matrix.
 --    Example:
 --    transpose ((1 :: 2 :: 3 :: nil) :: (4 :: 5 :: 6 :: nil)) == ((1 :: 4 :: nil) :: (2 :: 5 :: nil) :: (3 :: 6 :: nil))
+
+\func transpose-help {A : \Type}
+                     (xs : List A) (m : List (List A)) : List (List A) \elim xs, m
+  | nil, nil => nil
+  | nil, _ :: _ => nil
+  | _ :: _, nil => nil
+  | a :: xs, xs' :: m => (a :: xs') :: transpose-help xs m
+
+\func transpose {A : \Type} (m : List (List A)) : List (List A) \elim m
+  | nil => nil
+  | xs :: m => transpose-help xs (transpose m)
