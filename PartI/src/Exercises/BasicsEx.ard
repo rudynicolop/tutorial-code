@@ -32,8 +32,7 @@
 
 \func fac (x : Nat) : Nat \elim x
   | 0 => 1
-  | 1 => 1
-  | suc (suc x) => fac (suc x) + fac x
+  | suc n => suc n * fac n
 
 -- 5. Define mod and gcd.
 

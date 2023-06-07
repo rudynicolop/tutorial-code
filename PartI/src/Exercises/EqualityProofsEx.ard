@@ -1,4 +1,5 @@
 \import EqualityProofs
+\import Indexed (Bool, false, if, true)
 
 -- 1. The operator 'J' has a different form, which we denote 'Jalt'. Prove that 'J' and 'Jalt' are equivalent, i.e.
 -- define 'J' in terms of 'Jalt' and vice versa.
@@ -7,45 +8,188 @@
 
 \func Jalt {A : \Type} (B : \Pi (a a' : A) -> a = a' -> \Type)
            (b : \Pi (a : A) -> B a a idp)
-           {a a' : A} (p : a = a') : B a a' p => {?}
+           {a a' : A} (p : a = a') : B a a' p =>
+  J (B a) (b a) p
 
 -- Define 'J' via 'Jalt'. You can use only 'Jalt', 'idp' and everything definable in terms of these constructs (but not pattern matching on 'idp').
 -- See the end of this file for a hint.
 
-\func transport' {A : \Type} (B : A -> \Type) {a a' : A} (p : a = a') (b : B a) : B a' => {?}
+\func transport' {A : \Type} (B : A -> \Type) {a a' : A} (p : a = a') (b : B a) : B a' =>
+  \let | B' (x y : A) (x=y : x = y) : \Type => B x -> B y
+       | b' (z : A) : B' z z idp => \lam (b : B z) => b
+       | t : B a -> B a' => Jalt B' b' {a} {a'} p
+  \in t b
 
-\func sigma-contr {A : \Type} {a : A} (p : \Sigma (x : A) (a = x)) : (a,idp) = {\Sigma (x : A) (a = x)} p => {?}
+\func sigma-contr {A : \Type} {a : A} (p : \Sigma (x : A) (a = x)) : (a,idp) = {\Sigma (x : A) (a = x)} p \elim p
+ | (x,a=x) =>
+  Jalt (\lam u v u=v => (u,idp) = {\Sigma (x : A) (u = x)} (v,u=v))
+       (\lam _ => idp) a=x
 
 \func J' {A : \Type} {a : A} (B : \Pi (a' : A) -> a = a' -> \Type)
          (b : B a idp)
-         {a' : A} (p : a = a') : B a' p => {?}
+         {a' : A} (p : a = a') : B a' p =>
+  \let | aidp=a'p : (a,idp) = {\Sigma (a' : A) (a = a')} (a',p) => sigma-contr (a', p)
+  \in transport' (\lam ex => B ex.1 ex.2) aidp=a'p b
 
 -- 2. Prove that 'vnil' is an identity for 'v++'.
 
-\func vnil-rightId {A : \Type} {n : Nat} (xs : Vec A n) : transport (Vec A) (+-comm 0 n) (xs v++ vnil) = xs => {?}
+\func vnil-rightId {A : \Type} {n : Nat} (xs : Vec A n) : transport (Vec A) (+-comm 0 n) (xs v++ vnil) = xs \elim n, xs
+  | 0, vnil => idp
+  | suc n, vcons a xs =>
+    transport (Vec A) (pmap suc (+-comm 0 n)) (vcons a (xs v++ vnil))
+      ==< v++-assoc.transport-vcons-comm (+-comm 0 n) a (xs v++ vnil) >== vcons a (transport (Vec A) (+-comm 0 n) (xs v++ vnil))
+      ==< pmap (vcons a) (vnil-rightId xs) >== vcons a xs `qed
 
 -- 3. Prove that all definitions of <= given in the module are equivalent.
+
+\func lessOrEq-refl (n : Nat) : lessOrEq n n \elim n
+  | 0 => unit
+  | suc n => lessOrEq-refl n
+
+\func suc=zero (n : Nat) (h : suc n = 0) : Empty \elim h
+
+\func pred (n : Nat) : Nat \elim n
+  | 0 => 0
+  | suc n => n
+
+\func sucn=sucm->n=m (n m : Nat) (h : suc n = suc m) : n = m =>
+  pmap pred h
+
+\func LessOrEq-sucn-zero (n : Nat) (h : LessOrEq (suc n) 0) : Empty \elim h
+
+\func absurd {A : \Type} (e : Empty) : A \elim e
+
+\func LessOrEq'''->lessOrEq (n m : Nat) (n<=m : LessOrEq''' n m) : lessOrEq n m \elim n<=m
+  | (k, k+n=m) => help k n m k+n=m
+  \where \func help (k n m : Nat) (k+n=m : k + n = m) : lessOrEq n m \elim n, m
+    | 0, 0 => unit
+    | 0, suc m => unit
+    | suc n, 0 => suc=zero _ k+n=m
+    | suc n, suc m => help k n m (sucn=sucm->n=m _ _ k+n=m)
+
+\func LessOrEq'''->LessOrEq (n m : Nat) (n<=m : LessOrEq''' n m) : LessOrEq n m \elim n<=m
+  | (k, k+n=m) => help k n m k+n=m
+  \where \func help (k n m : Nat) (k+n=m : k + n = m) : LessOrEq n m \elim n, m
+    | 0, 0 => z<=n
+    | 0, suc m => z<=n
+    | suc n, 0 => absurd (suc=zero _ k+n=m)
+    | suc n, suc m => s<=s (help _ _ _ (sucn=sucm->n=m _ _ k+n=m))
+
+\func LessOrEq'''->LessOrEq' (n m : Nat) (n<=m : LessOrEq''' n m) : LessOrEq' n m \elim n<=m
+  | (k, k+n=m) => help k n m k+n=m
+  \where \func help (k n m : Nat) (k+n=m : k + n = m) : LessOrEq' n m \elim n, m
+    | 0, 0 => z<=n' idp
+    | 0, suc m => z<=n' idp
+    | suc n, 0 => absurd (suc=zero _ k+n=m)
+    | suc n, suc m => s<=s' idp idp (help _ _ _ (sucn=sucm->n=m _ _ k+n=m))
+
+\func LessOrEq''-0 (n : Nat) : LessOrEq'' 0 n \elim n
+  | 0 => <=-refl idp
+  | suc n => <=-step (LessOrEq''-0 n)
+
+\func LessOrEq''-suc {n m : Nat} (n<=m : LessOrEq'' n m) : LessOrEq'' (suc n) (suc m) \elim m, n<=m
+  | suc m, <=-step n<=m => <=-step (LessOrEq''-suc n<=m)
+  | m, <=-refl p => transport (\lam m => LessOrEq'' (suc n) (suc m)) p (<=-refl idp)
+
+\func LessOrEq'''->LessOrEq'' (n m : Nat) (n<=m : LessOrEq''' n m) : LessOrEq'' n m \elim n<=m
+  | (k, k+n=m) => help k n m k+n=m
+  \where \func help (k n m : Nat) (k+n=m : k + n = m) : LessOrEq'' n m \elim n, m
+    | 0, 0 => <=-refl idp
+    | 0, suc m => LessOrEq''-0 (suc m)
+    | suc n, 0 => absurd (suc=zero _ k+n=m)
+    | suc n, suc m => LessOrEq''-suc (help _ _ _ (sucn=sucm->n=m _ _ k+n=m))
+
+\func lessOrEq->LessOrEq'' (n m : Nat) (n<=m : lessOrEq n m) : LessOrEq'' n m \elim n, m
+  | 0, 0 => <=-refl idp
+  | 0, suc m => LessOrEq''-0 (suc m)
+  | suc n, 0 => absurd n<=m
+  | suc n, suc m => LessOrEq''-suc (lessOrEq->LessOrEq'' _ _ n<=m)
+
+\func LessOrEq->lessOrEq (n m : Nat) (n<=m : LessOrEq n m) : lessOrEq n m \elim n, m, n<=m
+  | 0, m, z<=n => unit
+  | suc n, suc m, s<=s n<=m => LessOrEq->lessOrEq _ _ n<=m
 
 -- 4. Define the membership predicate 'In' for lists.
 
 \data List (A : \Type) | nil | cons A (List A)
 
-\data In {A : \Type} (a : A) (xs : List A)
+\data In {A : \Type} (a : A) (xs : List A) \elim xs
+  | cons x xs => Head (x=a : x = a)
+  | cons x xs => Tail (In a xs)
+
+\func \infixr 4 ++ {A : \Type} (xs ys : List A) : List A \elim xs
+  | nil => ys
+  | cons a xs => cons a (xs ++ ys)
+
+\func In-duh {A : \Type} (a : A) (xs : List A) : In a (cons a xs) => Head idp
+
+\func In' {A : \Type} (a : A) (xs : List A) : \Type =>
+  \Sigma (xs1 xs2 : List A) (xs = xs1 ++ cons a xs2)
+
+\func In->In' {A : \Type} (a : A) (xs : List A) (in : In a xs) : In' a xs \elim xs, in
+  | cons x xs, Head x=a => (nil, xs, pmap (\lam x => cons x xs) x=a)
+  | cons x xs, Tail in =>
+    \let | in' => In->In' a xs in
+    \in (cons x in'.1, in'.2, pmap (cons x) in'.3)
+
+\func In'->In {A : \Type} (a : A) (xs : List A) (in : In' a xs) : In a xs =>
+  transport (In a) (inv in.3) (help in.1 in.2)
+  \where \func help (xs1 xs2 : List A) : In a (xs1 ++ cons a xs2) \elim xs1
+    | nil => Head idp
+    | cons a1 xs1 => Tail (help xs1 xs2)
 
 -- 5. Define reflexive and transitive closure of a relation.
 --    That is 'ReflTransClosure R' -- is the minimal reflexive and transitive relation containing R.
 
 \data ReflTransClosure {A : \Type} (R : A -> A -> \Type) (x y : A)
+  | Refl (x=y : x = y)
+  | Trans (z : A) (R x z) (ReflTransClosure R z y)
+
+\func ReflTransClosure-refl {A : \Type} (R : A -> A -> \Type) (x : A)
+  : ReflTransClosure R x x => Refl idp
+
+\func ReflTransClosure-trans {A : \Type} (R : A -> A -> \Type)
+  {x y z : A} (r1 : ReflTransClosure R x y) (r2 : ReflTransClosure R y z)
+  : ReflTransClosure R x z \elim r1
+  | Refl p => transport (\lam y => ReflTransClosure R y z) (inv p) r2
+  | Trans w r r1 => Trans _ r (ReflTransClosure-trans R r1 r2)
 
 -- 6. Prove that if 'R' is already reflexive and transitive then 'ReflTransClosure R' is equivalent to 'R'.
 
 \func \infix 4 <-> {A : \Type} (P Q : A -> A -> \Type) => \Pi (x y : A) -> \Sigma (P x y -> Q x y) (Q x y -> P x y)
 
-\func ReflTransClosure-lem {A : \Type} (R : A -> A -> \Type) (refl : \Pi (x : A) -> R x x) (trans : \Pi (x y z : A) -> R x y -> R y z -> R x z) : R <-> ReflTransClosure R => {?}
+\func ReflTransClosure-lem {A : \Type} (R : A -> A -> \Type) (refl : \Pi (x : A) -> R x x) (trans : \Pi (x y z : A) -> R x y -> R y z -> R x z) : R <-> ReflTransClosure R =>
+  \lam x y => (lem1 x y, lem2 x y)
+  \where {
+    \func lem1 (x y : A) (r : R x y) : ReflTransClosure R x y =>
+      Trans y r (Refl idp)
+    \func lem2 (x y : A) (r : ReflTransClosure R x y) : R x y \elim r
+      | Refl p => transport (R x) p (refl x)
+      | Trans z r r1 => trans _ _ _ r (lem2 _ _ r1)
+  }
 
 -- 7. Define the predicate xs <= ys for lists, which says "the list xs is a sublist of ys".
 
+\func Eq {A : \Type} (x y : A) => x = y
+
+\data \infix 3 <=l {A : \Type} (xs ys : List A) \with
+  | nil, ys => <=-nil
+  | cons x xs, cons y ys => <=-cons (x=y : Eq x y) (xs <=l ys)
+  | xs, cons y ys => <=-skip (xs <=l ys)
+
 -- 8. Prove that 'filter xs <= xs' for any list xs.
+
+\func filter {A : \Type} (f : A -> Bool) (xs : List A) : List A \elim xs
+  | nil => nil
+  | cons a xs => if (f a) (cons a (filter f xs)) (filter f xs)
+
+\func filter-<=l {A : \Type} (f : A -> Bool) (xs : List A) : filter f xs <=l xs
+  | f, nil => <=-nil
+  | f, cons a xs => help f (f a) a xs
+    \where \func help {A : \Type} (f : A -> Bool) (b : Bool) (a : A) (xs : List A)
+     : if b (cons a (filter f xs)) (filter f xs) <=l cons a xs \elim b
+      | false => <=-skip (filter-<=l f xs)
+      | true => <=-cons idp (filter-<=l f xs)
 
 
 

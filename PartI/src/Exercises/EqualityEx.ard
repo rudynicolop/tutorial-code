@@ -49,7 +49,13 @@
 
 -- 7. Define factorial via Nat-rec (i.e., without recursion and pattern matching).
 
+\func factorial : Nat -> Nat => Nat-rec Nat 1 (\lam n fct => n * fct)
+
 -- 8. Prove associativity of Nat.+ via Nat-elim (i.e., without recursion and pattern matching).
+
+\func +-assoc (l m n : Nat) : (l Nat.+ m) Nat.+ n = l Nat.+ (m Nat.+ n) =>
+  Nat-elim (\lam x => (x Nat.+ m) Nat.+ n = x Nat.+ (m Nat.+ n))
+      idp (\lam k ih => pmap suc ih) l
 
 -- 9. Define recursor and eliminator for D.
 
@@ -58,23 +64,64 @@
   | con2 D D
   | con3 (Nat -> D)
 
+\func D-elim
+  (P : D -> \Type)
+  (con1' : \Pi (n : Nat) -> P (con1 n))
+  (con2' : \Pi (d1 d2 : D) -> P d1 -> P d2 -> P (con2 d1 d2))
+  (con3' : \Pi (f : Nat -> D) -> (\Pi (n : Nat) -> P (f n)) -> P (con3 f))
+  (d : D) : P d \elim d
+  | con1 n => con1' n
+  | con2 d1 d2 =>
+    con2' d1 d2
+        (D-elim P con1' con2' con3' d1)
+        (D-elim P con1' con2' con3' d2)
+  | con3 f =>
+    con3' f (\lam n => D-elim P con1' con2' con3' (f n))
+
+\func D-rec
+  {A : \Type}
+  : (Nat -> A)
+  -> (D -> D -> A -> A -> A)
+  -> ((Nat -> D) -> (Nat -> A) -> A)
+  -> D -> A =>
+  D-elim (\lam _ => A)
+
 -- 10. Define recursor and eliminator for List.
 
 \data List (A : \Type) | nil | cons A (List A)
+
+\func List-elim
+  {A : \Type}
+  (P : List A -> \Type)
+  (nil' : P nil)
+  (cons' : \Pi (a : A) (l : List A) -> P l -> P (cons a l))
+  (l : List A) : P l \elim l
+  | nil => nil'
+  | cons a l => cons' a l (List-elim P nil' cons' l)
+
+\func List-rec
+  {A B : \Type}
+  : B -> (A -> List A -> B -> B) -> List A -> B =>
+  List-elim (\lam _ => B)
 
 -- 11. We defined transport via coe.
 --     Define a special case of coe via transport.
 --     Is it possible to define transport via coe0?
 
-\func coe0 (A : I -> \Type) (a : A left) : A right => {?}
+\func coe0 (A : I -> \Type) (a : A left) : A right =>
+  transport A left=right a
+
+\func transport'' {A : \Type} (B : A -> \Type) {a a' : A} (p : a = a') (b : B a) : B a' =>
+  coe0 (\lam i => B (p @ i)) b
 
 -- 12. Define a function B right -> B left.
 
-\func Itr' {B : I -> \Type} (b : B right) : B left => {?}
+\func Itr' {B : I -> \Type} (b : B right) : B left =>
+  transport B (inv left=right) b
 
 -- 13. Prove that 0 does not equal to suc x.
 
-\func zero/=suc (x : Nat) (p : 0 = suc x) : Empty => {?}
+\func zero/=suc (x : Nat) (p : 0 = suc x) : Empty \elim p
 
 -- 14. Prove that fac does not equal to suc.
 
@@ -84,4 +131,7 @@
   | 0 => 1
   | suc n => suc n * fac n
 
-\func fac/=suc (p : fac = suc) : Empty => {?}
+\func one/=two (p : 1 = 2) : Empty \elim  p
+
+\func fac/=suc (p : fac = suc) : Empty =>
+  one/=two (transport (\lam x => fac 1 = x 1) p idp)

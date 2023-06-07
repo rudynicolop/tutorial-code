@@ -1,39 +1,169 @@
+\import Exercises.BasicsEx (gcd)
 \import Records
 
 -- 1. Define the function 'swap' in several ways.
 
 -- Using \cowith and field access.
-\func swap {A B : \Type} (p : Pair A B) : Pair B A => {?}
+\func swap {A B : \Type} (p : Pair A B) : Pair B A \cowith
+  | fst' => p.snd'
+  | snd' => p.fst'
 
 -- Using \new and pattern matching.
-\func swap' {A B : \Type} (p : Pair A B) : Pair B A => {?}
+\func swap' {A B : \Type} (p : Pair A B) : Pair B A \with
+  | (a,b) => \new Pair { | fst' => b | snd' => a }
 
 -- Using \new and field access.
-\func swap'' {A B : \Type} (p : Pair A B) : Pair B A => {?}
+\func swap'' {A B : \Type} (p : Pair A B) : Pair B A =>
+  \new Pair { | fst' => p.snd' | snd' => p.fst' }
 
 -- 2. Prove that 'swap (swap p) = p'.
 
-\func swap-involutive {A B : \Type} (p : Pair A B) : swap (swap p) = p => {?}
+\func swap-involutive {A B : \Type} (p : Pair A B) : swap (swap p) = p => idp
 
 -- 3. Prove that the type 'PosNat 0' is empty, but the type 'PosNat 1' is not.
 
 \data Empty
 
-\func zero-isNotPos (p : PosNat 0) : Empty => {?}
+\func T-false (t : T false) : Empty \elim t
 
-\func one-isPos : PosNat 1 => {?}
+\func zero-isNotPos (p : PosNat 0) : Empty =>
+  T-false (PosNat.p {p})
+
+\func one-isPos : PosNat 1 \cowith
+  | p => tt
 
 -- 4. Define the \record consisting of pairs of coprime natural numbers.
 --    Define the type of natural numbers that are coprime with 60.
 
+\record coprime
+  | x : Nat
+  | y : Nat
+  | GCD : gcd x y = 1
+
+\func coprime-60 => coprime { | x => 60 }
+
 -- 5. Define the class of monads, which extends the class of functors. Define \instance of this class for 'Maybe'.
 
+\class Monad (M : \Type -> \Type)
+  \extends Functor {
+  | ret : \Pi {A : \Type} -> A -> M A
+  | \infixl 3 >>= : \Pi {A B : \Type} -> M A -> (A -> M B) -> M B
+  | left-id : \Pi {A B : \Type} (a : A) (f : A -> M B)
+     -> ret a >>= f = f a
+  | right-id : \Pi {A : \Type} (m : M A)
+     -> m >>= ret = m
+  | >>=-assoc : \Pi {A B C : \Type}
+      (f : A -> M B) (g : B -> M C) (m : M A)
+      -> m >>= f >>= g = m >>= (\lam a => f a >>= g)
+}
+
 \data Maybe (A : \Type) | nothing | just A
+
+\func Maybe-map {A B : \Type} (f : A -> B) (m : Maybe A) : Maybe B \elim m
+  | nothing => nothing
+  | just a => just (f a)
+
+\func Maybe-map-id {A : \Type} (m : Maybe A)
+  : Maybe-map (\lam a => a) m = m \elim m
+  | nothing => idp
+  | just a => idp
+
+\func Maybe-map-comp {A B C : \Type}
+  (f : A -> B) (g : B -> C) (m : Maybe A)
+  : Maybe-map (\lam a => g (f a)) m
+  = Maybe-map g (Maybe-map f m) \elim m
+  | nothing => idp
+  | just a => idp
+
+\func Maybe-bind {A B : \Type}
+  (m : Maybe A) (f : A -> Maybe B) : Maybe B \elim m
+  | nothing => nothing
+  | just a => f a
+
+\func Maybe-bind-left-id {A B : \Type}
+  (a : A) (f : A -> Maybe B)
+  :  Maybe-bind (just a) f = f a => idp
+
+\func Maybe-bind-right-id {A : \Type}
+  (m : Maybe A) : Maybe-bind m just = m \elim m
+  | nothing => idp
+  | just a => idp
+
+\func Maybe-bind-assoc {A B C : \Type}
+  (f : A -> Maybe B) (g : B -> Maybe C) (m : Maybe A)
+  : Maybe-bind (Maybe-bind m f) g
+  = Maybe-bind m (\lam a => Maybe-bind (f a) g) \elim m
+  | nothing => idp
+  | just a => idp
+
+\instance Maybe-Monad : Monad Maybe
+  | fmap => Maybe-map
+  | fmap-id => Maybe-map-id
+  | fmap-comp => Maybe-map-comp
+  | M => Maybe
+  | ret => just
+  | >>= => Maybe-bind
+  | left-id => Maybe-bind-left-id
+  | right-id => Maybe-bind-right-id
+  | >>=-assoc => Maybe-bind-assoc
 
 -- 6. Define instances for the class of monads for 'State' and 'State''.
 
 \record State (S A : \Type)
   | state : S -> \Sigma S A
+
+\func State-map {S A B : \Type} (f : A -> B)
+  (m : State S A) : State S B \cowith
+  | state =>
+    \lam s =>
+      \let | sa => m.state s
+      \in (sa.1, f sa.2)
+
+\func State-map-id {S A : \Type} (m : State S A)
+  : State-map (\lam a => a) m = m => idp
+
+\func State-map-comp
+  {S A B C : \Type}
+  (f : A -> B) (g : B -> C) (m : State S A)
+  : State-map (\lam a => g (f a)) m = State-map g (State-map f m) =>
+  idp
+
+\func State-ret {S A : \Type}
+  (a : A) : State S A \cowith
+  | state => \lam s => (s, a)
+
+\func State-bind {S A B : \Type}
+  (m : State S A)
+  (f : A -> State S B) : State S B \cowith
+  | state => \lam s =>
+      \let | sa => m.state s
+           | sb : State S B => f sa.2
+      \in sb.state sa.1
+
+\func State-bind-left-id
+  {S A B : \Type} (a : A) (f : A -> State S B)
+  : State-bind (State-ret a) f = f a => idp
+
+\func State-bind-right-id
+  {S A : \Type} (m : State S A)
+  : State-bind m State-ret = m => idp
+
+\func State-bind-assoc
+  {S A B C : \Type}
+  (f : A -> State S B) (g : B -> State S C) (m : State S A)
+  : State-bind (State-bind m f) g
+  = State-bind m (\lam a => State-bind (f a) g) => idp
+
+\instance State-Monad (S : \Type) : Monad (State S)
+  | fmap => State-map
+  | fmap-id => State-map-id
+  | fmap-comp => State-map-comp
+  | M => State S
+  | ret => State-ret
+  | >>= => State-bind
+  | left-id => State-bind-left-id
+  | right-id => State-bind-right-id
+  | >>=-assoc => State-bind-assoc
 
 \data State' (S A : \Type)
   | state' (S -> \Sigma S A)
