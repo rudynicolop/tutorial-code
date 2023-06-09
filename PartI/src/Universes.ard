@@ -1,3 +1,4 @@
+\import Case
 
 -------------------------------------------------
 -- Hierarchies of universes, polymorphism
@@ -67,9 +68,48 @@
   | suc x, 0 => false
   | suc x, suc y => x < y
 
+\func absurd {A : \Type} (e : Empty) : A \elim e
+
+\data Triple (A B C : \Type)
+  | inl (a : A) | inm (b : B) | inr (c : C)
+
+\func comp (m n : Nat) : Triple (T (m < n)) (m = n) (T (n < m)) \elim m, n
+  | 0, 0 => inm idp
+  | 0, suc n => inl unit
+  | suc m, 0 => inr unit
+  | suc m, suc n =>
+    \case comp m n \with {
+      | inl a => inl a
+      | inm b => inm (pmap suc b)
+      | inr c => inr c
+    }
+
+\func <-zero {n : Nat} (t : T (n < 0)) : Empty \elim n
+  | 0 => absurd t
+  | suc n => absurd t
+
+\func hate
+  {m n : Nat} (t1 : T (n < m)) (t2 : T (m < suc n)) : Empty \elim m, n
+  | 0, 0 => absurd t1
+  | 0, suc n => absurd t1
+  | suc m, 0 => <-zero t2
+  | suc m, suc n => hate t1 t2
+
 \func Nat-ind (E : Nat -> \Type)
               (r : \Pi (n : Nat) -> (\Pi (k : Nat) -> T (k < n) -> E k) -> E n)
-              (n : Nat) : E n => {?} -- prove this as an exercise
+              (n : Nat) : E n =>
+  r n (wah n)
+\where {
+  \func wah (n k : Nat) (t : T (k < n)) : E k \elim n
+    | 0 => absurd (<-zero t)
+    | suc n =>
+      \let | f : \Pi (k : Nat) -> T (k < n) -> E k => wah n
+      \in \case comp k n \with {
+            | inl k<n => f k k<n
+            | inm k=n => transport E (inv k=n) (r n f)
+            | inr n<k => absurd (hate n<k t)
+          }
+    }
 
 -------------------------------------------------
 -- Induction-recusrion

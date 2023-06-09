@@ -1,3 +1,4 @@
+\import Case (inv, transport)
 \import Universes
 
 -- 1. Calculate levels in each of the the invocations of 'id''' below.
@@ -13,7 +14,8 @@
 
 -- 2. Define 'div' via 'Nat-ind'.
 
-\func div (n k : Nat) (p : T (0 < k)) : Nat => {?}
+\func div (n k : Nat) (p : T (0 < k)) : Nat =>
+  Nat-ind (\lam _ => Nat) (\lam n f => {?}) n
 
 -- 3. Prove the following induction principle for lists:
 
@@ -25,9 +27,100 @@
   {A : \Type}
   (E : List A -> \Type)
   (r : \Pi (xs : List A) -> (\Pi (ys : List A) -> T (length ys < length xs) -> E ys) -> E xs)
-  (xs : List A) : E xs => {?}
+  (xs : List A) : E xs => r xs (wah xs)
+  \where \func wah (xs ys : List A) (t : T (length ys < length xs))
+    : E ys \elim xs
+    | nil => absurd (<-zero t)
+    | cons a xs =>
+      \let | f : \Pi (ys : List A) -> T (length ys < length xs) -> E ys => wah xs
+      \in \case comp (length ys) (length xs) \with {
+        | inl p => f ys p
+        | inm p => r ys
+            (transport
+                (\lam x =>
+                    \Pi (ys : List A) -> T (length ys < x) -> E ys)
+                (inv p) f)
+        | inr p => absurd (hate p t)
+      }
 
 -- 4. Implement function 'filter' and prove that it is correct, that is that the following holds:
 --    * 'filter p xs' is a sublist of 'xs'
 --    * All elements of 'filter p xs' satisfy the predicate 'p'
 --    * Any sublist of 'xs' with this property is a sublist of 'filter p xs'
+
+\func filter {A : \Type} (p : A -> Bool) (xs : List A) : List A \elim xs
+  | nil => nil
+  | cons a xs => \case p a \with {
+    | false => filter p xs
+    | true => cons a (filter p xs)
+  }
+
+\data Forall {A : \Type} (P : A -> \Type) (xs : List A) \elim xs
+  | nil => Forall-nil
+  | cons x xs => Forall-cons (P x) (Forall P xs)
+
+\data \infix 3 <= {A : \Type} (xs : List A) (ys : List A) \with
+  | nil, ys => <=-nil
+  | cons x xs, cons y ys => <=-cons (x = y) (xs <= ys)
+  | xs, cons y ys => <=-skip (xs <= ys)
+
+\func filter-pred {A : \Type} (p : A -> Bool) (xs : List A)
+  : Forall (\lam a => T (p a)) (filter p xs) \elim xs
+  | nil => Forall-nil
+  | cons a xs =>
+    \case p a \as pa, idp : pa = p a \return
+    Forall (\lam a => T (p a)) (\case pa \with {
+      | false => filter p xs
+      | true => cons a (filter p xs)
+    }) \with {
+      | false, _ => filter-pred p xs
+      | true, pa=true =>
+        Forall-cons
+            (transport T pa=true unit)
+            (filter-pred p xs)
+    }
+\func filter-<= {A : \Type} (p : A -> Bool) (xs : List A)
+  : filter p xs <= xs \elim xs
+  | nil => <=-nil
+  | cons a xs =>
+    \case p a \as pa \return
+    (\case pa \with {
+      | false => filter p xs
+      | true => cons a (filter p xs)
+    }) <= cons a xs \with {
+      | false => <=-skip (filter-<= p xs)
+      | true => <=-cons idp (filter-<= p xs)
+    }
+
+\func T-=-true {b : Bool} (t : T b) : b = true \elim b
+  | false => absurd t
+  | true => idp
+
+\func <=-filter {A : \Type} (p : A -> Bool) {zs xs : List A}
+  (zs<=xs : zs <= xs) (hzs : Forall (\lam a => T (p a)) zs)
+  : zs <= filter p xs \elim zs, xs, zs<=xs, hzs
+  | nil, xs, <=-nil, Forall-nil => <=-nil
+  | cons z zs, cons x xs, <=-cons z=x zs<=xs, Forall-cons p2 hzs =>
+    transport
+        (\lam x =>
+            cons z zs <= (\case p x \with {
+              | false => filter p xs
+              | true => cons x (filter p xs)
+            })) z=x
+        (transport
+        (\lam pz =>
+            cons z zs <= (\case pz \with {
+              | false => filter p xs
+              | true => cons z (filter p xs)
+            })) (inv (T-=-true p2))
+            (<=-cons idp (<=-filter p zs<=xs hzs)))
+  | nil, cons x xs, <=-skip zs<=xs, Forall-nil => <=-nil
+  | cons z zs, cons x xs, <=-skip zs<=xs, Forall-cons p1 hzs =>
+    \case p x \as px, idp : px = p x
+    \return cons z zs <= (\case px \with {
+      | false => filter p xs
+      | true => cons x (filter p xs)
+    })\with {
+      | false, p2 => <=-filter p zs<=xs (Forall-cons p1 hzs)
+      | true, p2 => <=-skip (<=-filter p zs<=xs (Forall-cons p1 hzs))
+    }
