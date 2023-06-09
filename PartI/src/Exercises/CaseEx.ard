@@ -1,18 +1,67 @@
 \import Case
+\import Exercises.RecordsEx (Maybe, just, nothing)
 
 -- 1. Implement any sorting algorithm using \case for pattern matching on the result of comparison of elements
 -- of a list.
 
+\func insert
+  {A : \Type} (<= : A -> A -> Bool)
+  (a : A) (xs : List A) : List A \elim xs
+  | nil => cons a nil
+  | cons x xs =>
+    \case a `<=` x \with {
+      | false => cons x (insert <= a xs)
+      | true => cons a (cons x xs)
+    }
+
+\func sort
+  {A : \Type} (<= : A -> A -> Bool)
+  (xs : List A) : List A \elim xs
+  | nil => nil
+  | cons a xs => insert <= a (sort <= xs)
+
 -- 2. Define 'filter' via 'if' not using \case.
 --    Prove the lemma 'filter-lem' for this version of 'filter'.
 
-\func filter' {A : \Type} (p : A -> Bool) (xs : List A) : List A => {?}
+\func if {A : \Type} (b : Bool) (a1 a2 : A) : A \elim b
+  | false => a2
+  | true => a1
 
-\func filter-lem {A : \Type} (p : A -> Bool) (xs : List A) : length (filter' p xs) <= length xs => {?}
+\func filter' {A : \Type} (p : A -> Bool) (xs : List A) : List A \elim xs
+  | nil => nil
+  | cons a xs => if (p a) (cons a (filter' p xs)) (filter' p xs)
+
+\func filter-lem {A : \Type} (p : A -> Bool) (xs : List A) : length (filter' p xs) <= length xs \elim xs
+  | nil => unit
+  | cons a xs =>
+    \case (p a) \as b
+    \return length (if b (cons a (filter' p xs)) (filter' p xs)) <= suc (length xs)
+    \with {
+      | false => <=-helper (filter-lem p xs)
+      | true => filter-lem p xs
+    }
 
 -- 3. Prove that, for every function f : Bool -> Bool and every x : Bool, it is true that f (f (f x)) = f x.
 
-\func Bool-lem (f : Bool -> Bool) (x : Bool) : f (f (f x)) = f x => {?}
+\func Bool-lem (f : Bool -> Bool) (x : Bool) : f (f (f x)) = f x =>
+  \case x \as x', f x' \as b, idp : b = f x' \return f (f b) = b \with {
+  | false, false, p =>
+    transport (\lam y => f y = false) p
+        (transport (\lam y => y = false) p idp)
+  | false, true, p =>
+    \case f true \as ft, idp : ft = f true \return f ft = true\with {
+      | false, p1 => inv p
+      | true, p1 => inv p1
+    }
+  | true, false, p =>
+    \case f false \as ff, idp : ff = f false \return f ff = false\with {
+      | false, p1 => inv p1
+      | true, p1 => inv p
+    }
+  | true, true, p =>
+    transport (\lam y => f y = true) p
+        (transport (\lam y => y = true) p idp)
+}
 
 -- 4. Define the view, which represents a natural number as a pair of the quotient and the remainder of
 -- division by a positive 'm'. Implement the division function.
@@ -20,20 +69,186 @@
 \data ModView (m n : Nat)
   | quot-rem (q r : Nat) (t : T (r < m)) (p : n = q * m + r)
 
-\func mod-view (m n : Nat) (t : T (0 < m)) : ModView m n => {?}
+\func *-zero (n : Nat) : 0 * n = 0 \elim n
+  | 0 => idp
+  | suc n => *-zero n
 
-\func div (n m : Nat) (t : T (0 < m)) : Nat => {?}
+\func +-zero (n : Nat) : 0 + n = n \elim n
+  | 0 => idp
+  | suc n => pmap suc (+-zero n)
+
+\func T-not-zero<n {n : Nat} (t : T (not (0 < n))) : n = 0 \elim n
+  | 0 => idp
+  | suc n => absurd t
+
+\func bruh {m n : Nat} (t1 : T (m < n)) (t2 : T (not (suc m < n)))
+  : suc m = n \elim m, n
+  | 0, 0 => absurd t1
+  | 0, suc n => pmap suc (inv (T-not-zero<n t2))
+  | suc m, 0 => absurd t1
+  | suc m, suc n => pmap suc (bruh t1 t2)
+
+\func \infixl 5 - (x y : Nat) : Nat \elim x, y
+  | 0, 0 => zero
+  | 0, suc y => zero
+  | suc x, 0 => suc x
+  | suc x, suc y => x - y
+
+\func suc-+ (m n : Nat) : suc m + n = suc (m + n) \elim n
+  | 0 => idp
+  | suc n => pmap suc (suc-+ m n)
+
+\func +-comm (m n : Nat) : m + n = n + m \elim n
+  | 0 => inv (+-zero m)
+  | suc n =>
+    transport (\lam x => suc (m + n) = x) (inv (suc-+ n m))
+      (pmap suc (+-comm m n))
+
+\func +-assoc (k m n : Nat) : k + (m + n) = k + m + n \elim n
+  | 0 => idp
+  | suc n => pmap suc (+-assoc k m n)
+
+\func suc-* (m n : Nat) : suc m * n = m * n + n \elim n
+  | 0 => idp
+  | suc n => pmap suc
+      (transport (\lam x => x + m = m * n + m + n)
+          (inv (suc-* m n))
+          (transport (\lam x => x = m * n + m + n)
+              (+-assoc (m * n) n m)
+              (transport (\lam x => m * n + (n + m) = x)
+                  (+-assoc (m * n) m n)
+                  (pmap (+ (m * n)) (+-comm n m)))))
+
+\func m+n-m {m n : Nat} (m<=n : m <= n) : m + (n - m) = n \elim m, n
+  | 0, 0 => idp
+  | 0, suc n => pmap suc (+-zero n)
+  | suc m, 0 => absurd m<=n
+  | suc m, suc n =>
+    transport (\lam x => x = suc n)
+    (inv (suc-+ m (n - m))) (pmap suc (m+n-m m<=n))
+
+\data Triple (A B C : \Type)
+  | inl (a : A) | inm (b : B) | inr (c : C)
+
+\func comp (m n : Nat) : Triple (T (m < n)) (m = n) (T (n < m)) \elim m, n
+  | 0, 0 => inm idp
+  | 0, suc n => inl unit
+  | suc m, 0 => inr unit
+  | suc m, suc n =>
+    \case comp m n \with {
+      | inl a => inl a
+      | inm b => inm (pmap suc b)
+      | inr c => inr c
+    }
+
+\func <-zero {n : Nat} (t : T (n < 0)) : Empty \elim n
+  | 0 => absurd t
+  | suc n => absurd t
+
+\func hate
+  {m n : Nat} (t1 : T (n < m)) (t2 : T (m < suc n)) : Empty \elim m, n
+  | 0, 0 => absurd t1
+  | 0, suc n => absurd t1
+  | suc m, 0 => <-zero t2
+  | suc m, suc n => hate t1 t2
+
+\func mod-view (m n : Nat) (t : T (0 < m)) : ModView m n \elim n
+  | 0 => quot-rem 0 0 t (inv (*-zero m))
+  | suc n =>
+    \case mod-view m n t \with {
+      | quot-rem q r t1 p =>
+        \case comp (suc r) m \with {
+          | inl a => quot-rem q (suc r) a (pmap suc p)
+          | inm b =>
+            \let | h : n = q * r + q + r
+              => transport (\lam m => n = q * m + r) (inv b) p
+                 | h' : n = q * r + r + q
+              => transport (\lam x => n = x) (+-assoc (q * r) r q)
+                 (transport (\lam x => n = q * r + x)
+                 (inv (+-comm r q))
+                 (transport (\lam x => n = x) (inv (+-assoc (q * r) q r)) h))
+            \in transport
+                (\lam m => ModView m (suc n)) b
+                (quot-rem
+                    (suc q) 0 unit
+                    (pmap
+                        suc
+                        (transport
+                            (\lam x => n = x + q) (inv (suc-* q r))
+                            h')))
+          | inr c => absurd (hate t1 c)
+        }
+    }
+
+\func div (n m : Nat) (t : T (0 < m)) : Nat =>
+  \case mod-view m n t \with {
+    | quot-rem q r t1 p => q
+  }
 
 -- 5. Prove that the predicate 'isEven' is decidable.
 
 \func isEven (n : Nat) => \Sigma (k : Nat) (n = 2 * k)
 
-\func isEven-dec : DecPred isEven => {?}
+\func suc-inj {m n : Nat} (h : suc m = suc n) : m = n =>
+  pmap pred h
+
+\func gy {m n : Nat} (h : 2 * m = suc (2 * n)) : Empty \elim m, n
+  | 0, 0 => suc/=0 (inv h)
+  | 0, suc n => suc/=0 (inv h)
+  | suc m, 0 => suc/=0 (suc-inj h)
+  | suc m, suc n => gy (suc-inj (suc-inj h))
+
+\func isEven-dec : DecPred isEven =>
+  \lam n => \case parity n \with {
+    | even k p => yes (k, p)
+    | odd k p => no (\lam e => \case e \with {
+      | (k', p') => gy (transport (\lam x => x = suc (2 * k)) p' p)
+    })
+  }
 
 -- 6. Prove that if equality of elements of a type 'A' is decidable, then equality of elements if 'List A' is also decidable.
 
+\func nil=cons {A : \Type} {x : A} {xs : List A}
+  (h : nil = cons x xs) : Empty \elim h
+
+\func unjust {A : \Type} (def : A) (m : Maybe A) : A \elim m
+  | nothing => def
+  | just a => a
+
+\func just-inj {A : \Type} {x y : A}
+  (h : Maybe.just x = Maybe.just y) : x = y =>
+  pmap (unjust x) h
+
+\func hd {A : \Type} (xs : List A) : Maybe A \elim xs
+  | nil => Maybe.nothing
+  | cons a xs => Maybe.just a
+
+\func tl {A : \Type} (xs : List A) : List A \elim xs
+  | nil => nil
+  | cons a xs => xs
+
+\func cons=cons {A : \Type} {x y : A} {xs ys : List A}
+  (h : cons x xs = cons y ys) : \Sigma (x = y) (xs = ys) =>
+  \let | h1 : Maybe.just x = Maybe.just y => pmap hd h
+       | h2 : xs = ys => pmap tl h
+       | h3 : x = y => pmap (unjust x) h1
+  \in (h3, h2)
+
 \instance ListEq {A : \Type} (dec : Eq A) : Eq (List A)
-  | decideEq => {?}
+  | decideEq => deq
+  \where \func deq (xs ys : List A) : Decide (xs = ys) \elim xs, ys
+    | nil, nil => yes idp
+    | nil, cons a ys => no nil=cons
+    | cons a xs, nil => no (\lam h => nil=cons (inv h))
+    | cons x xs, cons y ys =>
+      \case dec.decideEq x y, deq xs ys \with {
+        | yes x=y, yes xs=ys =>
+          transport (\lam z => Decide (cons x xs = cons z ys))
+          x=y (yes (pmap (cons x) xs=ys))
+        | yes a, no _x => no \lam h => _x (cons=cons h).2
+        | no _x, yes a => no \lam h => _x (cons=cons h).1
+        | no _x, no _x1 => no \lam h => _x (cons=cons h).1
+      }
 
 -- 7. Prove that if equality of elements of a type 'A' is decidable, then every list of elements of 'A' is either empty,
 -- consists of repetitions of one element or there exist two different elements in 'A'.
@@ -47,11 +262,56 @@
   | repeated (n : Nat) (a : A) (p : xs = repeat n a)
   | A-is-not-trivial (a a' : A) (p : a = a' -> Empty)
 
-\func lemma {A : \Type} (xs : List A) {dec : DecEq A} : Result A xs => {?}
+\func lemma {A : \Type} (xs : List A) {dec : DecEq A} : Result A xs \elim xs
+  | nil => empty idp
+  | cons a nil => repeated 1 a idp
+  | cons a (cons x xs) => \case dec a x \with {
+    | yes a=x => transport (\lam y => Result A (cons a (cons y xs))) a=x
+        \case lemma xs {dec} \with {
+          | empty p => transport (\lam ys => Result A (cons a (cons a ys))) (inv p)
+              (repeated 2 a idp)
+          | repeated n y p => \case dec a y \with {
+            | yes a=y => transport (\lam ys => Result A (cons a (cons a ys)))
+                (inv (transport (\lam z => xs = repeat n z) (inv a=y) p))
+                (repeated (n + 2) a idp)
+            | no a/=y => A-is-not-trivial _ _ a/=y
+          }
+          | A-is-not-trivial a1 a' p => A-is-not-trivial _ _ p
+        }
+    | no a/=x => A-is-not-trivial a x a/=x
+  }
 
 -- 8. Prove that the functions 'FromBoolToDec' and 'FromDecToBool' are inverse to each other.
 
-\func bdb {A : \Type} (p : A -> Bool) : FromDecToBool (FromBoolToDec p) = p => {?}
+\func FunExt {A B : \Type} (f g : A -> B) (h : \Pi (x : A) -> f x = g x) : f = g =>
+  path (\lam i a => h a @ i)
+
+\func dumb {A : \Type} (P : A -> \Type) (d : DecPred P)
+  : FromDecToBool (P, d) = \lam a => \case d a \with { | yes _ => true | no _ => false } => idp
+
+\func bdb {A : \Type} (p : A -> Bool) : FromDecToBool (FromBoolToDec p) = p =>
+  FunExt _ _ stupid
+  \where {
+    \func stupid (a : A)
+      : (\case (\case p a \as b \return Decide (T b) \with {
+                | true => yes unit
+                | false => no (\lam x => x)
+              }) \with {
+          | yes _ => true
+          | no _ => false
+        }) = p a =>
+      \case p a \as pa
+      \return  (\case (\case pa \as b \return Decide (T b) \with {
+        | true => yes unit
+        | false => no (\lam x => x)
+      }) \with {
+        | yes _ => true
+        | no _ => false
+      }) = pa \with {
+        | false => idp
+        | true => idp
+      }
+  }
 
 -- We cannot prove that 'FromBoolToDec (FromDecToBool P) = P', but we can prove a weaker statement:
 -- these predicates are logically equivalent.
@@ -59,4 +319,25 @@
 -- Equivalence of predicates
 \func \infix 4 <-> {A : \Type} (P Q : A -> \Type) => \Pi (x : A) -> \Sigma (P x -> Q x) (Q x -> P x)
 
-\func dbd {A : \Type} (P : \Sigma (P : A -> \Type) (DecPred P)) : (FromBoolToDec (FromDecToBool P)).1 <-> P.1 => {?}
+\func dbd {A : \Type} (P : \Sigma (P : A -> \Type) (DecPred P)) : (FromBoolToDec (FromDecToBool P)).1 <-> P.1 =>
+  \lam a => (dbd1 P.1 P.2 a, dbd2 P.1 P.2 a)
+  \where {
+    \func dbd1
+      (P : A -> \Type) (d : DecPred P) (a : A)
+      (t : T (\case d a \with { | yes _ => true | no _ => false })) : P a =>
+      \case d a \as da, idp : d a = da \with {
+        | yes pa, p => pa
+        | no _pa, p => absurd
+            (transport
+                (\lam yn => T (\case yn \with { | yes _ => true | no _ => false}))
+                p t)
+      }
+
+    \func dbd2
+      (P : A -> \Type) (d : DecPred P) (a : A)
+      (pa : P a) : T (\case d a \with { | yes _ => true | no _ => false }) =>
+      \case d a \as da \return T (\case da \with { | yes _ => true | no _ => false }) \with {
+        | yes _ => unit
+        | no _pa => _pa pa
+      }
+  }
