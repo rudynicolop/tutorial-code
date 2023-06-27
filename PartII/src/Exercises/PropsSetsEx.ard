@@ -441,16 +441,6 @@
   | inl a => d
   | inr b => b
 
-\func inl-uninl {A B : \Type} (d : A) (e : Either A B) : inl (uninl d e) = e => {?}
-
-{-
-\func retract-either
-  {A B C D : \Type}
-  (p : isProp C) (q : isProp D) (f : C -> A) (g : D -> B)
-  (Hinl : \Pi (a : A) (b : B) -> Either (f ))
- -}
-
-
 \func or-isSet {A B : \Type} (p : isSet A) (q : isSet B) : isSet (Either A B) =>
   \lam e1 e2 =>
     retract'-isProp {e1 = e2} {wy e1 e2} (wy-isProp e1 e2) (wy2 e1 e2) (hate e1 e2)
@@ -501,14 +491,92 @@
 
 -- 11. Prove that if 'B x' is a set, then '\Pi (x : A) -> B x' is a set.
 
-\func pi-isSet {A : \Type} (B : A -> \Type) (p : \Pi (x : A) -> isSet (B x)) : isSet (\Pi (x : A) -> B x) => {?}
+\func pi-isSet {A : \Type} (B : A -> \Type) (p : \Pi (x : A) -> isSet (B x)) : isSet (\Pi (x : A) -> B x) =>
+  \lam f g =>
+      retract-isProp
+          {f = g} {\Pi (x : A) -> f x = g x}
+          (PropsSets.forall-isProp
+              (\lam (x : A) => f x = g x) \lam (x : A) => p x (f x) (g x))
+          (\lam (f=g : f = g) (x : A) =>
+              transport (\lam g => f x = g x) f=g idp)
+          (funExt B f g)
+          (wah f g)
+  \where {
+    \func wah (f g : \Pi (x : A) -> B x) (f=g : f = g)
+      : funExt B f g (\lam x => transport (\lam g => f x = g x) f=g idp) = f=g
+      \elim f=g
+        | idp => idp
+  }
 
 -- 12. Prove that if 'A' is a set, then 'List A' is a set.
 
-\func List-isSet {A : \Type} (pA : isSet A) : isSet (List A)
-  => {?}
+\func List-isSet {A : \Type} (pA : isSet A) : isSet (List A) =>
+  \lam xs ys =>
+  retract-isProp
+      {xs = ys} {List-Eq xs ys}
+      (List-Eq-isProp xs ys)
+      (to-List-Eq xs ys) (of-List-Eq xs ys) {?}
+  \where {
+    \data List-Eq (xs ys : List A) : \Type \elim xs, ys
+      | nil, nil => nil-Eq
+      | cons x xs, cons y ys => cons-Eq (x = y) (List-Eq xs ys)
 
--- 13. Prove that n-types are closed under \Pi-types.
+    \func List-Eq-isProp (xs ys : List A) : isProp (List-Eq xs ys) =>
+      List-Eq-isProp' xs ys
+
+    \func List-Eq-isProp' (xs ys : List A) (p q : List-Eq xs ys) : p = q \with
+      | nil, nil, nil-Eq, nil-Eq => idp
+      | cons x xs, cons y ys, cons-Eq p1 p2, cons-Eq q1 q2 =>
+        pmap (cons-Eq p1) (List-Eq-isProp' xs ys p2 q2)
+          *> {List-Eq (cons x xs) (cons y ys)} {cons-Eq p1 p2} {cons-Eq p1 q2} {cons-Eq q1 q2}
+        pmap (\lam h => cons-Eq h q2) (pA x y p1 q1)
+
+    \func hd (d : A) (xs : List A) : A \elim xs
+      | nil => d
+      | cons a xs => a
+
+    \func tl (xs : List A) : List A \elim xs
+      | nil => nil
+      | cons a xs => xs
+
+    \func to-List-Eq (xs ys : List A) (h : xs = ys) : List-Eq xs ys \elim xs, ys
+      | nil, nil => nil-Eq
+      | nil, cons a ys => \case h
+      | cons a xs, nil => \case h
+      | cons x xs, cons y ys =>
+        cons-Eq (pmap (hd x) h) (to-List-Eq xs ys (pmap tl h))
+
+    \func of-List-Eq (xs ys : List A) (l : List-Eq xs ys) : xs = ys \elim xs, ys, l
+      | nil, nil, nil-Eq => idp
+      | cons x xs, cons y ys, cons-Eq p l =>
+        pmap (\lam a => cons a xs) p
+          *> {List A} {cons x xs} {cons y xs} {cons y ys}
+        pmap (cons y) (of-List-Eq xs ys l)
+
+    \func of-to-ListEq (xs ys : List A) (h : xs = ys) :
+      of-List-Eq xs ys (to-List-Eq xs ys h) = h \elim h
+      | idp => of-to-ListEq' xs
+
+    \func of-to-ListEq' (xs : List A)
+      : of-List-Eq xs xs (to-List-Eq xs xs idp) = idp \elim xs
+      | nil => idp
+      | cons x xs => help x xs (of-to-ListEq' xs)
+
+    \func help
+      (x : A) (xs : List A)
+      (ih : of-List-Eq xs xs (to-List-Eq xs xs idp) = idp)
+      : pmap (\lam a => cons a xs) idp
+      *> pmap (cons x) (of-List-Eq xs xs (to-List-Eq xs xs idp)) = idp =>
+      pmap (\lam h => pmap (\lam a => cons a xs) idp *> pmap (cons x) h) ih
+        *> {cons x xs = cons x xs}
+           {pmap (\lam a => cons a xs) idp
+              *> pmap (cons x) (of-List-Eq xs xs (to-List-Eq xs xs idp))}
+           {pmap (\lam a => cons a xs) idp *> pmap (cons x) idp}
+           {idp}
+      idp
+  }
+
+    -- 13. Prove that n-types are closed under \Pi-types.
 --     Hint: Proof by induction. For the induction step 'suc n' one should prove that if 'f,g : \Pi (x : A) -> B x',
 --           then 'f = g' is equivalent to '\Pi (x : A) -> f x = g x'.
 
