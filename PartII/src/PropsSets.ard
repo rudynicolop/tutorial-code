@@ -17,6 +17,14 @@
 \func pmap {A B : \Type} (f : A -> B) {a a' : A} (p : a = a') : f a = f a'
   => transport (\lam x => f a = f x) p idp
 
+\func transport-idp {A : \Type} (B : A -> \Type) {a : A} (b : B a)
+  : transport B idp b = b => idp
+
+\func pmap-dep {A : \Type} {B : A -> \Type}
+  (f : \Pi (a : A) -> B a) {x y : A} (x=y : x = y)
+  : transport B x=y (f x) = f y \elim x=y
+  | idp => transport-idp B (f x)
+
 \func \infixr 5 *> {A : \Type} {a a' a'' : A} (p : a = a') (q : a' = a'') : a = a''
   => transport (\lam x => a = x) q p
 
@@ -49,6 +57,15 @@
   : t1 = t2 \elim t1, t2, p, q
   | (x,y), (x',y'), idp, idp => idp
 
+{-
+\func inv-sigmaEq {A : \Type} (B : A -> \Type) (t1 t2 : \Sigma (x : A) (B x))
+  (h : t1 = t2) :
+  \Sigma (p : t1.1 = t2.1) (transport B p t1.2 = t2.2) \elim t1, t2
+  | (x,bx), (y,by) =>
+  \let | w => pmap-dep (\lam z => z.2) h
+  \in (pmap (\lam z => z.1) h, transport (\lam b => transport B (pmap (\lam z => z.1) h) bx = b) w {?})
+-}
+
 \func T-lem {b : Bool} {x y : T b} : x = y
   | {true} => idp
 
@@ -73,7 +90,9 @@
 
 \func Mul-inc (m : MultipleOf3Or5) => m.1
 
--- \func Mul-inc-isInj (p : isInj Mul-inc) : Empty => {?}
+\func Mul-inc-isInj (p : isInj Mul-inc) : Empty =>
+  \let | h => pmap-dep (\lam z => z.2) (p (0, inl idp) (0, inr idp) idp)
+  \in {?}
 
 -------------------------------------------------
 -- Mere propositions

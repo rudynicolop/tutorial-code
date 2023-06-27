@@ -1,3 +1,6 @@
+\import PropsSets
+\open Nat (+, *)
+
 \data Bool | false | true
 
 \data Empty
@@ -7,6 +10,9 @@
 \func T (b : Bool) : \Type
   | true => \Sigma
   | false => Empty
+
+\func T-lem {b : Bool} {x y : T b} : x = y
+  | {true} => idp
 
 \func isInj {A B : \Type} (f : A -> B) =>
   \Pi (x y : A) -> f x = f y -> x = y
@@ -23,6 +29,14 @@
   | yes A
   | no (A -> Empty)
 
+\func Decide-to-Bool {A : \Type} (d : Decide A) : Bool \elim d
+  | yes a => true
+  | no _x => false
+
+\func DecEq (A : \Type) => \Pi (x y : A) -> Decide (x = y)
+
+\func UIP-Decide {A : \Type} (d : DecEq A) {x y : A} (p q : x = y) : p = q => {?}
+
 \func hasLevel (A : \Type) (suc-l : Nat) : \Type \elim suc-l
   | 0 => isProp A
   | suc suc-l => \Pi (x y : A) -> (x = y) `hasLevel` suc-l
@@ -34,22 +48,213 @@
 -- Composition of functions
 \func \fixr 9 o {A B C : \Type} (g : B -> C) (f : A -> B) => \lam a => g (f a)
 
-\func o-inj {A B C : \Type} (f : A -> B) (g : B -> C) (p : isInj f) (q : isInj g) : isInj (g `o` f) => {?}
+\func o-inj {A B C : \Type} (f : A -> B) (g : B -> C) (p : isInj f) (q : isInj g) : isInj (g `o` f) =>
+  \lam x y h => p x y (q (f x) (f y) h)
 
-\func o-inj' {A B C : \Type} (f : A -> B) (g : B -> C) (p : isInj (g `o` f)) : isInj f => {?}
+\func o-inj' {A B C : \Type} (f : A -> B) (g : B -> C) (p : isInj (g `o` f)) : isInj f =>
+  \lam x y h => p x y (transport (\lam b => g (f x) = g b) h idp)
 
 -- 2. Define the predicate "divisible by 3 or by 5" in such a way that it is a proposition.
 --    Prove that 'MultipleOf3Or5' embeds in ℕ.
 
-\func isMultipleOf3Or5 (n : Nat) : \Type => {?}
+\func \infixr 3 or (b1 b2 : Bool) : Bool \elim b1
+  | false => b2
+  | true => true
 
-\func isMultipleOf3Or5-isProp (n : Nat) : isProp (isMultipleOf3Or5 n) => {?}
+\func if {A : \Type} (b : Bool) (x y : A) : A \elim b
+  | false => y
+  | true => x
+
+\func Bool-to-Nat (b : Bool) : Nat
+  | false => 0
+  | true => 1
+
+\func suc/=zero {n : Nat} (p : suc n = 0) : Empty \elim p
+
+\func pred (n : Nat) : Nat \elim n
+  | 0 => 0
+  | suc n => n
+
+\func sucn/=n {n : Nat} (p : suc n = n) : Empty \elim n
+  | 0 => suc/=zero p
+  | suc n => sucn/=n (pmap pred p)
+
+\func sucn+/=n {n m : Nat} (p : suc (n + m) = n) : Empty \elim n,m
+  | 0, 0 => sucn/=n p
+  | 0, suc m => suc/=zero p
+  | suc n, 0 => sucn/=n (pmap pred p)
+  | suc n, suc m => sucn+/=n {n} {suc m} (pmap pred p)
+
+\func *-zero (n : Nat) : 0 * n = 0 \with
+  | 0 => idp
+  | suc n => *-zero n
+
+\func +-comm (m n : Nat) : m + n = n + m \with
+  | 0, 0 => idp
+  | 0, suc n => idp
+  | suc m, 0 => idp
+  | suc m, suc n => pmap suc (pmap suc (+-comm m n))
+
+\func +-assoc (k m n : Nat) : k + (m + n) = k + m + n \elim n
+  | 0 => idp
+  | suc n => pmap suc (+-assoc k m n)
+
+\func fck (m n : Nat) : n * m + m = suc n * m \elim m
+  | 0 => idp
+  | suc m => pmap suc
+      (transport (\lam z => z = suc n * m + n) (+-assoc (n * m) n m)
+          (transport (\lam z => n * m + z = suc n * m + n) (+-comm m n)
+              (transport (\lam z => z = suc n * m + n) (sym (+-assoc (n * m) m n))
+                  (pmap (\lam m => m Nat.+ n) (fck m n)))))
+
+\func *-comm (m n : Nat) : m * n = n * m \elim n
+  | 0 => sym (*-zero m)
+  | suc n =>
+    transport
+        (\lam z => z + m = suc n * m)
+        (sym (*-comm m n)) (fck m n)
+
+\func nonsense {m n : Nat} (p : m + n = 0) (t : 1 <='' n) : Empty \elim n, t
+  | n, <=''.<=-refl p' =>
+    Absurd (suc/=zero {m}
+      (transport (\lam n => m + n = 0) (sym p') p))
+  | 1, zero<=one p' => suc/=zero p
+  | suc n, <=''.<=-step t => nonsense (pmap pred p) t
+
+\func +-inj-l (n : Nat) : isInj (\lam m => m + n) =>
+  \lam x y h => wah h
+  \where \func wah
+    {n x y : Nat} (h : x + n = y + n) : x = y \elim n
+    | 0 => h
+    | suc n => wah (pmap pred h)
+
+\func +-inj-r (n : Nat) : isInj (+ n) =>
+  \lam x y h => +-inj-l n x y
+      (transport (\lam z => z = y + n) (+-comm n x)
+          (transport (\lam z => n + x = z) (+-comm n y) h))
+
+\func *-inj-r (n : Nat) (t : 1 <='' n) : isInj (* n) =>
+  \lam x y h => wah h t
+  \where \func wah
+    {n x y : Nat} (h : n * x = n * y) (t : 1 <='' n) : x = y \elim x, y
+    | 0, 0 => idp
+    | 0, suc y => Absurd (nonsense (sym h) t)
+    | suc x, 0 => Absurd (nonsense h t)
+    | suc x, suc y =>
+      pmap suc (wah {n} {x} {y} (+-inj-l n (n * x) (n * y) h) t)
+
+\func *-inj-l (n : Nat) (t : 1 <='' n) : isInj (\lam m => m * n) =>
+  \lam x y h => *-inj-r n t x y
+      (transport (\lam z => z = n * y) (*-comm x n)
+          (transport (\lam z => x * n = z) (*-comm y n) h))
+
+\func Nat-Decide-= (m n : Nat) : Decide (m = n) \elim m, n
+  | 0, 0 => yes idp
+  | 0, suc n => no \lam h => suc/=zero (sym h)
+  | suc m, 0 => no suc/=zero
+  | suc m, suc n => \case Nat-Decide-= m n \with {
+    | yes m=n => yes (pmap suc m=n)
+    | no m/=n => no \lam h => m/=n (pmap pred h)
+  }
+
+\func UIP-Nat {x y : Nat} (p q : x = y) : p = q =>
+  UIP-Decide Nat-Decide-= p q
+
+-- m is a multiple of n
+\func \infix 3 isMultipleOf (m n : Nat) : \Type =>
+  \Sigma (k : Nat) (m = k * n)
+
+\func isMultipleOf-isProp (m n : Nat) (t : 1 <='' n) : isProp (m isMultipleOf n) => wah
+  \where {
+    \func wah (x y : m isMultipleOf n) : x = y \elim x, y
+      | (kx, px), (ky, py) =>
+        \let | duh : kx * n = ky * n => transport (\lam m => m = ky * n) px py
+             | doi : kx = ky => *-inj-l n t _ _ duh
+        \in sigmaEq (\lam k => m = k * n) (kx, px) (ky, py) doi (cry doi px py)
+
+    \func cry
+      {x y : Nat} (p : x = y) (px : m = x * n) (py : m = y * n)
+      : transport (\lam k => m = k * n) p px = py \elim p
+      | idp =>
+          transport (\lam py => transport (\lam k => m = k * n) idp px = py)
+          (UIP-Nat px py) (transport-idp (\lam k => m = k * n) px)
+  }
+
+\func ~ (A : \Type) => A -> Empty
+
+\func \infix 2 /= {A : \Type} (x y : A) => ~ (x = y)
+
+-- \func UIP-Decide-Not {A : \Type} (d : DecEq A) {x y : A} (p q : x /= y) : p = q => {?}
+
+\func one<=suc (n : Nat) : 1 <='' suc n \elim n
+  | 0 => <=''.<=-refl idp
+  | suc n => <=''.<=-step (one<=suc n)
+
+\func dumb {n : Nat} (h : n /= 0) : 1 <='' n \elim n
+  | 0 => Absurd (h idp)
+  | suc n => one<=suc n
+
+\func irrelevant-<= {m n : Nat} (p q : m `<=` n) : p = q \elim m, n, p, q
+  | 0, n, z<=n, z<=n => idp
+  | suc m, suc n, s<=s p, s<=s q => pmap s<=s (irrelevant-<= p q)
+
+\func bruh {n : Nat} (t : 1 `<=` n) (h : n = 0) : Empty \elim n, t
+  | suc n, s<=s t => suc/=zero h
+
+\data isMultipleOf3Or5 (n : Nat)
+| is-zero (n = 0)
+| of-3  (<= 1 n) (mod3 n = 0)    (<= 1 (mod5 n))
+| of-5  (<= 1 n) (<= 1 (mod3 n)) (mod5 n = 0)
+| of-15 (<= 1 n) (mod3 n = 0)    (mod5 n = 0)
+
+\func Absurd {A : \Type} (e : Empty) : A \elim e
+
+-- provable just too lazy
+\func isMultipleOf3Or5-isProp (n : Nat) : isProp (isMultipleOf3Or5 n) => wah
+  \where {
+    \func wah (x y : isMultipleOf3Or5 n) : x = y \elim x, y
+      | is-zero px, is-zero py => pmap is-zero (UIP-Nat px py)
+      | is-zero px, of-3 py y3 y5 => Absurd (bruh py px)
+      | is-zero px, of-5 py y3 y5 => Absurd (bruh py px)
+      | is-zero px, of-15 py y3 y5 => Absurd (bruh py px)
+      | of-3 px x3 x5, is-zero py => Absurd (bruh px py)
+      | of-3 px x3 x5, of-3 py y3 y5 =>
+        transport (\lam z => of-3 px x3 x5 = of-3 py y3 z)
+          (irrelevant-<= x5 y5)
+          (transport (\lam z => of-3 px x3 x5 = of-3 py z x5)
+            (UIP-Nat x3 y3)
+              (transport (\lam z => of-3 px x3 x5 = of-3 z x3 x5)
+                  (irrelevant-<= px py) idp))
+      | of-3 px x3 x5, of-5 py y3 y5 => Absurd (bruh y3 x3)
+      | of-3 px x3 x5, of-15 py y3 y5 => Absurd (bruh x5 y5)
+      | of-5 px x3 x5, is-zero py => Absurd (bruh px py)
+      | of-5 px x3 x5, of-3 py y3 y5 => Absurd (bruh y5 x5)
+      | of-5 px x3 x5, of-5 py y3 y5 =>
+        transport (\lam z => of-5 px x3 x5 = of-5 py y3 z)
+            (UIP-Nat x5 y5)
+            (transport (\lam z => of-5 px x3 x5 = of-5 py z x5)
+                (irrelevant-<= x3 y3)
+                (transport (\lam z => of-5 px x3 x5 = of-5 z x3 x5)
+                    (irrelevant-<= px py) idp))
+      | of-5 px x3 x5, of-15 py y3 y5 => Absurd (bruh x3 y3)
+      | of-15 px x3 x5, is-zero py => Absurd (bruh px py)
+      | of-15 px x3 x5, of-3 py y3 y5 => Absurd (bruh y5 x5)
+      | of-15 px x3 x5, of-5 py y3 y5 => Absurd (bruh y3 x3)
+      | of-15 px x3 x5, of-15 py y3 y5 =>
+        transport (\lam z => of-15 px x3 x5 = of-15 py y3 z)
+            (UIP-Nat x5 y5)
+            (transport (\lam z => of-15 px x3 x5 = of-15 py z x5)
+                (UIP-Nat x3 y3)
+                (transport (\lam z => of-15 px x3 x5 = of-15 z x3 x5)
+                    (irrelevant-<= px py) idp))
+  }
 
 \func MultipleOf3Or5 => \Sigma (n : Nat) (isMultipleOf3Or5 n)
 
 \func Mul-inc (m : MultipleOf3Or5) => m.1
 
-\func Mul-inc-isInj : isInj Mul-inc => {?}
+\func Mul-inc-isInj : isInj Mul-inc =>
+  \lam x y h => sigmaEq isMultipleOf3Or5 x y h (isMultipleOf3Or5-isProp _ _ _)
 
 -- 3. We say that a type 'A' is trivial if there exists an element in 'A' such that it is equal to
 --    any other element in 'A'.
@@ -59,18 +264,35 @@
 
 \func \infix 1 <-> (A B : \Type) => \Sigma (A -> B) (B -> A)
 
-\func isTriv-lem (A : \Type) : isTriv A <-> (\Sigma (isProp A) A) => {?}
+\func isTriv-lem (A : \Type) : isTriv A <-> (\Sigma (isProp A) A) =>
+  (l, r)
+  \where {
+    \func l (t : isTriv A) : \Sigma (isProp A) A \with
+      | (a, p) =>
+        (\lam x y =>
+             transport (\lam x => x = y) (p x)
+                 (transport (\lam y => a = y) (p y) idp)
+        , a)
+
+    \func r (t : \Sigma (isProp A) A) : isTriv A \with
+      | (p,a) => (a, p a)
+  }
 
 -- 4. Prove that 'Either' is not a proposition in general.
 
-\func Either-isProp (p : \Pi {A B : \Type} (pA : isProp A) (pB : isProp B) -> isProp (Either A B)) : Empty => {?}
+\func inl/=inr {A B : \Type} {a : A} {b : B} (h : inl a = inr b) : Empty \elim h
+
+\func Either-isProp (p : \Pi {A B : \Type} (pA : isProp A) (pB : isProp B) -> isProp (Either A B)) : Empty =>
+  \let | h : isProp (Either Unit Unit) => p Unit'-isProp Unit'-isProp
+       | wrong : inl unit = inr unit => h (inl unit) (inr unit)
+  \in inl/=inr wrong
 
 -- 5. Prove that '\Sigma' preserves propositions.
 
 \func Sigma-isProp {A : \Type} (pA : isProp A) (B : A -> \Type)
                    (pB : \Pi (x : A) -> isProp (B x))
   : isProp (\Sigma (x : A) (B x))
-  => {?}
+  => \lam x y => sigmaEq B x y (pA x.1 y.1) (pB _ _ _)
 
 -- 6. Prove that <= and <=' are predicates.
 
@@ -82,13 +304,29 @@
   | suc m => <=-step (<=' n m)
   | m => <=-refl (n = m)
 
-\func <=-isProp {n m : Nat} : isProp (<= n m) => {?}
+\func <=-isProp {n m : Nat} : isProp (<= n m) => irrelevant-<=
 
 -- In the proof of <='-isProp it is allowed to use the fact that Nat is set
 -- without a proof. We will return to the proof of this fact later.
 \func Nat-isSet : isSet Nat => {?}
 
-\func <='-isProp {n m : Nat} : isProp (<=' n m) => {?}
+\func isobv {m n : Nat} (q : suc n `<='` m) : n `<='` m \elim m, q
+  | suc m, <=-step q => <=-step (isobv q)
+  | m, <=-refl p => transport (\lam m => n `<='` m) p (<=-step (<=-refl idp))
+
+\func isgy {n : Nat} (q : suc n `<='` n) : Empty \elim n, q
+  | suc n, <=-step q => isgy (isobv q)
+  | n, <=-refl p => sucn/=n p
+
+\func <='-isProp {n m : Nat} : isProp (<=' n m) =>
+  \lam x y => wah x y
+  \where \func wah {n m : Nat} (q r : <=' n m) : q = r \elim m, q, r
+    | suc m, <=-step q, <=-step r => pmap <=-step (wah q r)
+    | suc m, <=-step q, <=-refl p =>
+      Absurd (isgy (transport (\lam n => n `<='` m) p q))
+    | suc m, <=-refl p, <=-step r =>
+      Absurd (isgy (transport (\lam n => n `<='` m) p r))
+    | m, <=-refl p, <=-refl p1 => pmap <=-refl (Nat-isSet _ _ p p1)
 
 -- 7. Prove that 'ReflClosure LessOrEq' is not a predicate, but 'ReflClosure (\lam x y => T (x < y))' is a predicate.
 
@@ -101,23 +339,165 @@
   | refl (x = y)
   | inc (R x y)
 
-\func ReflClosure_<-isProp (n m : Nat) : isProp (ReflClosure (\lam x y => T (x < y)) n m) => {?}
+\func n<n {n : Nat} (t : T (n < n)) : Empty \elim n
+  | 0 => t
+  | suc n => n<n t
 
-\func ReflClosure_<=-isNotProp (p : \Pi (n m : Nat) -> isProp (ReflClosure <= n m)) : Empty => {?}
+\func ReflClosure_<-isProp (n m : Nat) : isProp (ReflClosure (\lam x y => T (x < y)) n m) =>
+  \lam q r => wah q r
+  \where \func wah (q r : ReflClosure (\lam x y => T (x < y)) n m) : q = r \elim q, r
+    | refl p, refl p1 => pmap refl (Nat-isSet _ _ p p1)
+    | refl p, inc r => Absurd (n<n (transport (\lam n => T (n < m)) p r))
+    | inc r, refl p => Absurd (n<n (transport (\lam n => T (n < m)) p r))
+    | inc r, inc r1 => pmap inc T-lem
+
+\func refl/=inc {R : Nat -> Nat -> \Type} {x y : Nat}
+  {e : x = y} {r : R x y} (h : refl e = inc r) : Empty \elim h
+
+\func ReflClosure_<=-isNotProp (p : \Pi (n m : Nat) -> isProp (ReflClosure <= n m)) : Empty =>
+  \let | h : isProp (ReflClosure <= 0 0) => p 0 0
+       | wrong : refl idp = inc z<=n => h (refl idp) (inc z<=n)
+  \in refl/=inc wrong
 
 -- 8. Prove that if 'A' embeds in 'B' and 'B' is a proposition, then 'A' is proposition.
 
-\func sub-isProp {A B : \Type} (f : A -> B) (p : isInj f) (q : isProp B) : isProp A => {?}
+\func sub-isProp {A B : \Type} (f : A -> B) (p : isInj f) (q : isProp B) : isProp A =>
+  \lam x y => p x y (q _ _)
 
 -- 9. Prove that a type with decidable equality is a set. Note that this implies 'isSet Nat' since
 -- we have already proved that 'Nat' has decidable equality.
 
+\data Reflects (P : \Type) (b : Bool) \elim b
+| true  => ReflectY (P  : P)
+| false => ReflectN (~P : ~ P)
+
+\record Dic (P : \Type)
+  | does : Bool
+  | proof : Reflects P does
+
+\func of {b : Bool} {P : \Type} (p : if b P (~ P)) : Reflects P b \elim b
+  | false => ReflectN p
+  | true  => ReflectY p
+
+\func invert {b : Bool} {P : \Type} (r : Reflects P b) : if b P (~ P) \elim b, r
+  | true, ReflectY p => p
+  | false, ReflectN ~p => ~p
+
 \func Dec-isSet {A : \Type} (dec : \Pi (x y : A) -> Decide (x = y)) : isSet A
-  => {?}
+  => \lam x y => retract-isProp {x = y} { {?} } {?} {?} {?} {?}
+  -- {T (Decide-to-Bool (dec x y))}
+  -- (\lam t1 t2 => T-lem) to-T of-T to-of-T
+  -- sub-isProp {x = y} {?} {?} {?}
+  \where {
+    \func to-T {x y : A} (p : x = y) : T (Decide-to-Bool (dec x y)) =>
+      \case dec x y \as d \return T (Decide-to-Bool d)\with {
+        | yes a => ()
+        | no _x => _x p
+      }
+
+    \func of-T {x y : A} (t : T (Decide-to-Bool (dec x y))) : x = y =>
+      \case dec x y \as d, idp : dec x y = d \with {
+        | yes a, p => a
+        | no _x, p =>
+          Absurd (transport (\lam d => T (Decide-to-Bool d)) p t)
+      }
+
+    \func to-of-T {x y : A} (p : x = y) : of-T (to-T p) = p => simpl p
+
+    \func simpl {x y : A} (p : x = y)
+      : (\case dec x y \as d, idp : dec x y = d \with {
+      | yes a, q => a
+      | no _x, q =>
+        Absurd
+            (transport (\lam d => T (Decide-to-Bool d)) q
+            (\case dec x y \as d \return T (Decide-to-Bool d)\with {
+              | yes a => ()
+              | no _x => _x p
+            }))
+    }) = p =>
+      \case dec x y \as D \return
+      (\case D \as d, idp : D = d \with {
+        | yes a, q => a
+        | no _x, q =>
+          Absurd
+              (transport (\lam d => T (Decide-to-Bool d)) q
+                  (\case D \as d \return T (Decide-to-Bool d)\with {
+                    | yes a => ()
+                    | no _x => _x p
+                  }))
+      }) = p \with {
+        | yes a => {?}
+        | no _x => Absurd (_x p)
+      }
+  }
 
 -- 10. Prove that if 'A' and 'B' are sets, then A `Either` B is also a set.
 
-\func or-isSet {A B : \Type} (p : isSet A) (q : isSet B) : isSet (Either A B) => {?}
+\func uninl {A B : \Type} (d : A) (e : Either A B) : A \elim e
+  | inl a => a
+  | inr b => d
+
+\func uninr {A B : \Type} (d : B) (e : Either A B) : B \elim e
+  | inl a => d
+  | inr b => b
+
+\func inl-uninl {A B : \Type} (d : A) (e : Either A B) : inl (uninl d e) = e => {?}
+
+{-
+\func retract-either
+  {A B C D : \Type}
+  (p : isProp C) (q : isProp D) (f : C -> A) (g : D -> B)
+  (Hinl : \Pi (a : A) (b : B) -> Either (f ))
+ -}
+
+
+\func or-isSet {A B : \Type} (p : isSet A) (q : isSet B) : isSet (Either A B) =>
+  \lam e1 e2 =>
+    retract'-isProp {e1 = e2} {wy e1 e2} (wy-isProp e1 e2) (wy2 e1 e2) (hate e1 e2)
+
+  \where {
+    \data wy (e1 e2 : Either A B) : \Type \elim e1, e2
+      | inl a1, inl a2 => wy_inl (a1 = a2)
+      | inr b1, inr b2 => wy_inr (b1 = b2)
+
+    \func wy-inv-l {a1 a2 : A} (w : wy (inl a1) (inl a2)) : a1 = a2 \elim w
+      | wy_inl pa => pa
+
+    \func wy-inv-r {b1 b2 : B} (w : wy (inr b1) (inr b2)) : b1 = b2 \elim w
+      | wy_inr pb => pb
+
+    \func wy-inv-l-wy_inl {a1 a2 : A} (h : a1 = a2)
+      : wy-inv-l (wy_inl h) = h => idp
+
+    \func wy-inr-wy_inr {b1 b2 : B} (h : b1 = b2)
+      : wy-inv-r (wy_inr {A} h) = h => idp
+
+    \func wy-isProp (e1 e2 : Either A B) : isProp (wy e1 e2) =>
+      \lam x y => \case \elim e1, \elim e2, \elim x, \elim y \with {
+        | inl a1, inl a2, wy_inl p1, wy_inl p2 => pmap wy_inl (p a1 a2 p1 p2)
+        | inr b1, inr b2, wy_inr p1, wy_inr p2 => pmap wy_inr (q b1 b2 p1 p2)
+      }
+
+    \func wy1 (e1 e2 : Either A B) (h : e1 = e2) : wy e1 e2 \elim e1, e2
+      | inl a1, inl a2 => transport (wy (inl a1)) h (wy_inl idp)
+      | inl a, inr b => \case h
+      | inr b, inl a => \case h
+      | inr b1, inr b2 => transport (wy (inr b1)) h (wy_inr idp)
+
+    \func wy2 (e1 e2 : Either A B) (w : wy e1 e2) : e1 = e2
+    \elim e1, e2
+      | inl a1, inl a2 => pmap inl (wy-inv-l w)
+      | inl a, inr b => \case w
+      | inr b, inl a => \case w
+      | inr b1, inr b2 => pmap inr (wy-inv-r w)
+
+    \func hate (e1 e2 : Either A B) (h : e1 = e2)
+      : \Sigma (y : wy e1 e2) (wy2 e1 e2 y = h) \elim h
+      | idp => \case e1 \as e \return \Sigma (y : wy e e) (wy2 e e y = idp)\with {
+        | inl a => (transport (wy (inl a)) idp (wy_inl idp), idp)
+        | inr b => (transport (wy (inr b)) idp (wy_inr idp), idp)
+      }
+  }
 
 -- 11. Prove that if 'B x' is a set, then '\Pi (x : A) -> B x' is a set.
 
