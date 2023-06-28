@@ -1,29 +1,7 @@
-\import PropsSets
 \open Nat (+, *)
-
-\data Bool | false | true
-
-\data Empty
+\import PropsSets
 
 \data List (A : \Type) | nil | cons A (List A)
-
-\func T (b : Bool) : \Type
-  | true => \Sigma
-  | false => Empty
-
-\func T-lem {b : Bool} {x y : T b} : x = y
-  | {true} => idp
-
-\func isInj {A B : \Type} (f : A -> B) =>
-  \Pi (x y : A) -> f x = f y -> x = y
-
-\func isProp (A : \Type) => \Pi (x y : A) -> x = y
-
-\func isSet (A : \Type) => \Pi (a a' : A) -> isProp (a = a')
-
-\data \fixr 2 Either (A B : \Type)
-  | inl A
-  | inr B
 
 \data Decide (A : \Type)
   | yes A
@@ -341,7 +319,7 @@
 
 \func n<n {n : Nat} (t : T (n < n)) : Empty \elim n
   | 0 => t
-  | suc n => n<n t
+  | suc n => n<n {n} t
 
 \func ReflClosure_<-isProp (n m : Nat) : isProp (ReflClosure (\lam x y => T (x < y)) n m) =>
   \lam q r => wah q r
@@ -375,59 +353,121 @@
   | does : Bool
   | proof : Reflects P does
 
-\func of {b : Bool} {P : \Type} (p : if b P (~ P)) : Reflects P b \elim b
+\func of {P : \Type}  {b : Bool} (p : if b P (~ P)) : Reflects P b \elim b
   | false => ReflectN p
   | true  => ReflectY p
 
-\func invert {b : Bool} {P : \Type} (r : Reflects P b) : if b P (~ P) \elim b, r
+\func invert {P : \Type}  {b : Bool} (r : Reflects P b) : if b P (~ P) \elim b, r
   | true, ReflectY p => p
   | false, ReflectN ~p => ~p
 
-\func Dec-isSet {A : \Type} (dec : \Pi (x y : A) -> Decide (x = y)) : isSet A
-  => \lam x y => retract-isProp {x = y} { {?} } {?} {?} {?} {?}
-  -- {T (Decide-to-Bool (dec x y))}
-  -- (\lam t1 t2 => T-lem) to-T of-T to-of-T
-  -- sub-isProp {x = y} {?} {?} {?}
+\func Reflects-Dec {P : \Type}  {b : Bool} (r : Reflects P b) : Decide P \elim b, r
+  | true, ReflectY p => yes p
+  | false, ReflectN ~p => no ~p
+
+\func Dec-Reflects {P : \Type} (d : Decide P) : Reflects P (Decide-to-Bool d) \elim d
+  | yes p => ReflectY p
+  | no ~p => ReflectN ~p
+
+\func Constant
+  {A B : \Type} (f : A -> B) =>
+  \Pi (x y : A) -> f x = f y
+
+\func common
+  {A : \Type}
+  (dec : \Pi (x y : A) -> Decide (x = y))
+  {x y : A}
+  (h : x = y) : x = y =>
+  \case dec x y \as d, idp : d = dec x y \with {
+    | yes x=y, p => x=y
+    | no x/=y, p => Absurd (x/=y h)
+  }
+
+\func common-Constant
+  {A : \Type}
+  (dec : \Pi (x y : A) -> Decide (x = y))
+  {x y : A}
+  : Constant (common dec {x} {y}) =>
+  \lam p q => \case dec x y \as d \with {
+    | yes x=y => idp
+    | no x/=y => Absurd (x/=y p)
+  }
+
+\func \fix 2 qed {A : \Type} (a : A) : a = a => idp
+
+\func \infixr 1 >== {A : \Type} {a a' a'' : A} (p : a = a') (q : a' = a'') => p *> q
+
+\func \infix 2 ==< {A : \Type} (a : A) {a' : A} (p : a = a') => p
+
+-- As agda does it, not clear from exercises?
+\func Constant-isSet
+  {A : \Type} (f : \Pi {x y : A} -> x = y -> x = y)
+  (f-Constant : \Pi {x y : A} -> Constant {x = y} f) : isSet A =>
+  \lam x y p q =>
+      p ==< sym (bruh p) >==
+      sym (f idp) *> f p ==< pmap (*> (sym (f idp))) (f-Constant p q) >==
+      sym (f idp) *> f q ==< bruh q >==
+      q
+      `qed
   \where {
-    \func to-T {x y : A} (p : x = y) : T (Decide-to-Bool (dec x y)) =>
+    \func bruh {x y : A} (x=y : x = y)
+      : sym (f idp) *> f x=y = x=y \elim x=y
+      | idp => sym-left (f idp)
+  }
+
+\func Dec-isSet {A : \Type} (dec : \Pi (x y : A) -> Decide (x = y)) : isSet A
+  => Constant-isSet (common dec) (common-Constant dec)
+    {- \lam x y => retract'-isProp
+      {x = y} { T (Decide-to-Bool (dec x y)) }
+      (\lam p q => T-lem) (of-T x y) {?}
+     -}
+  \where {
+    \func to-T (x y : A) (p : x = y) : T (Decide-to-Bool (dec x y)) =>
       \case dec x y \as d \return T (Decide-to-Bool d)\with {
         | yes a => ()
         | no _x => _x p
       }
 
-    \func of-T {x y : A} (t : T (Decide-to-Bool (dec x y))) : x = y =>
+    \func dumb {x y : A} (x=y : x = y) : x = y \elim x=y
+      | idp => idp
+
+    \func of-T (x y : A) (t : T (Decide-to-Bool (dec x y))) : x = y =>
       \case dec x y \as d, idp : dec x y = d \with {
-        | yes a, p => a
+        | yes a, p => {?}
         | no _x, p =>
           Absurd (transport (\lam d => T (Decide-to-Bool d)) p t)
       }
 
-    \func to-of-T {x y : A} (p : x = y) : of-T (to-T p) = p => simpl p
+    \func hate (x y : A) (x=y : x = y)
+      : of-T x y (to-T x y x=y) = x=y \elim x=y
+      | idp => stupid x
 
-    \func simpl {x y : A} (p : x = y)
-      : (\case dec x y \as d, idp : dec x y = d \with {
-      | yes a, q => a
-      | no _x, q =>
-        Absurd
-            (transport (\lam d => T (Decide-to-Bool d)) q
-            (\case dec x y \as d \return T (Decide-to-Bool d)\with {
-              | yes a => ()
-              | no _x => _x p
-            }))
-    }) = p =>
-      \case dec x y \as D \return
-      (\case D \as d, idp : D = d \with {
-        | yes a, q => a
-        | no _x, q =>
-          Absurd
-              (transport (\lam d => T (Decide-to-Bool d)) q
-                  (\case D \as d \return T (Decide-to-Bool d)\with {
-                    | yes a => ()
-                    | no _x => _x p
-                  }))
-      }) = p \with {
+    \func stupid (x : A)
+      : of-T x x (to-T x x idp) = idp =>
+      \case dec x x \as d', idp : d' = dec x x
+      \return
+      (\case d' \as d, idp : d' = d \with {
+        | yes a, p => transport (\lam y => x = y) a idp
+        | no _x, p =>
+          Absurd (transport (\lam d => T (Decide-to-Bool d)) p
+                 (\case d' \as d \return T (Decide-to-Bool d)\with {
+                   | yes a => ()
+                   | no _x => _x idp
+                 }))
+      }) = idp
+      \with {
+        | yes a, p => {?}
+        | no _x, p => Absurd (_x idp)
+      }
+
+    \func of-to-T-sig (x y : A) (x=y : x = y)
+      : \Sigma (t : T (Decide-to-Bool (dec x y))) (of-T x y t = x=y) =>
+      (to-T x y {?}, {?})
+
+    \func dec-refl (x : A) : dec x x = yes idp =>
+      \case dec x x \as d \return d = yes idp\with {
         | yes a => {?}
-        | no _x => Absurd (_x p)
+        | no _x => Absurd (_x idp)
       }
   }
 
@@ -580,4 +620,55 @@
 --     Hint: Proof by induction. For the induction step 'suc n' one should prove that if 'f,g : \Pi (x : A) -> B x',
 --           then 'f = g' is equivalent to '\Pi (x : A) -> f x = g x'.
 
-\func levelPi {A : \Type} (B : A -> \Type) (n : Nat) (p : \Pi (x : A) -> B x `hasLevel` n) : (\Pi (x : A) -> B x) `hasLevel` n => {?}
+\func retract-hasLevel {A B : \Type} (n : Nat)
+  (h : B `hasLevel` n)
+  (f : A -> B) (g : B -> A)
+  (r : \Pi (x : A) -> g (f x) = x)
+  : A `hasLevel` n \elim n
+  | 0 => retract-isProp h f g r
+  | suc n => \lam x y =>
+      retract-hasLevel n (h (f x) (f y))
+          (pmap f)
+          (\lam fx=fy =>
+            x ==< sym (r x) >==
+            g (f x) ==< pmap g fx=fy >==
+            g (f y) ==< r y >==
+            y `qed)
+          help
+  \where {
+    \func help {x y : A} (x=y : x = y)
+      : (x ==< sym (r x) >== g (f x) ==< pmap g (pmap f x=y) >== g (f y) ==< r y >== qed y) = x=y
+      \elim x=y
+        | idp => bruh x
+
+    \func bruh (x : A)
+      : (sym (r x) *> pmap g (pmap f idp) *> r x) = idp => why x
+
+    \func why (x : A)
+      : (sym (r x) *> idp *> r x) = idp =>
+      sym (r x) *> idp *> r x ==< pmap (*> (sym (r x))) (idp-left (r x)) >==
+      sym (r x) *> r x ==< sym-left (r x) >==
+      idp `qed
+  }
+
+\func levelPi
+  {A : \Type} (B : A -> \Type) (n : Nat)
+  (p : \Pi (x : A) -> B x `hasLevel` n)
+  : (\Pi (x : A) -> B x) `hasLevel` n \elim n
+  | 0 => \lam f g => funExt B f g \lam x => p x (f x) (g x)
+  | suc n => \lam f g =>
+      \let | h (x : A) : (f x = g x) `hasLevel` n => p x (f x) (g x)
+      \in retract-hasLevel
+          {f = g} {\Pi (x : A) -> f x = g x}
+          n
+          (levelPi (\lam x => f x = g x) n h)
+          (\lam f=g x => transport (\lam g => f x = g x) f=g idp)
+          (funExt B f g)
+          (help f g)
+  \where {
+    \func help (f g : \Pi (x : A) -> B x) (f=g : f = g)
+      : funExt B f g (\lam x => transport (\lam g => f x = g x) f=g idp) = f=g
+      \elim f=g
+        | idp => idp
+  }
+
